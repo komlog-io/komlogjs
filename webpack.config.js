@@ -13,8 +13,22 @@ var config = {
   output: {
     path: BUILD_DIR,
     publicPath: '/static/',
-    filename: '[name].js'
+    filename: '[name].js',
   },
+  plugins: [
+    new webpack.DefinePlugin({
+      'process.env': {
+        'NODE_ENV': JSON.stringify('production')
+      }
+    }),
+    new webpack.optimize.UglifyJsPlugin({
+      compress: {
+        warnings: false,
+        screw_ie8: true
+      },
+      comments: false,
+    }),
+  ],
   module : {
     loaders : [
       { test : /\.jsx?/, include : APP_DIR, loader : 'babel' },
@@ -25,7 +39,7 @@ var config = {
       { test: /\.ttf(\?v=\d+\.\d+\.\d+)?$/, loader: "url?limit=10000&mimetype=application/octet-stream" },
       { test: /\.svg(\?v=\d+\.\d+\.\d+)?$/, loader: "url?limit=10000&mimetype=image/svg+xml" },
       { test: /\.png(\?v=\d+\.\d+\.\d+)?$/, loader: "url?limit=10000&mimetype=image/png" },
-    ]
+    ],
   },
 };
 

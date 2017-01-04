@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "webpack -d --watch",
-    "build": "webpack -p"
+    "dev": "webpack --progress -d --watch",
+    "build": "webpack --progress -p"
   },
   "author": "Komlog",
   "license": "ISC",
