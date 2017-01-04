@@ -1,0 +1,106 @@
+
+.navbar-nav a {
+    color: white;
+    font-size: 15px;
+}
+
+.navbar-nav a:hover {
+    color: black;
+    font-size: 15px;
+}
+
+.navbar-brand {
+    color: #00FF00;
+    direction: rtl;
+    font-family: "Courier New", Courier, monospace;
+}
+
+.navbar-brand:hover {
+    color: white;
+}
+
+.navbar-brand::first-letter {
+  color: white;
+}
+
+.well-signin {
+      max-width: 430px;
+      margin: 0 auto;
+}
+
+.form-signin,
+.form-signup {
+      max-width: 330px;
+      padding: 15px;
+      margin: 0 auto;
+}
+
+.form-signin .form-signin-heading,
+.form-signup .form-signup-heading,
+.form-signin .checkbox {
+      margin-bottom: 10px;
+}
+.form-signin .checkbox {
+      font-weight: normal;
+}
+.form-signup .form-signup-heading{
+      margin-bottom: 10px;
+}
+
+.form-signup .form-control,
+.form-signin .form-control {
+      position: relative;
+      height: auto;
+      -webkit-box-sizing: border-box;
+      -moz-box-sizing: border-box;
+      box-sizing: border-box;
+      padding: 10px;
+      font-size: 16px;
+}
+
+.form-signin input[type="text"] ,
+.form-signup input[type="text"] {
+      margin-bottom: -1px;
+      border-bottom-right-radius: 0;
+      border-bottom-left-radius: 0;
+}
+
+.form-signin input[type="password"] {
+      margin-bottom: 10px;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+}
+
+.form-signup input[type="email"] {
+      margin-bottom: 10px;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+}
+
+.with-header {
+  background-color: #262B33;
+}
+
+.main-content {
+  padding-top: 80px;
+  padding-bottom: 40px;
+}
+
+.form-invite button,
+.form-invite .form-group .form-control{
+      margin-top: 15px;
+      font-size: 16px;
+}
+
+.form-signup input:required:invalid, .form-signup input:focus:invalid {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AocEiYcQpLp0QAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAAArUlEQVRIx+2W0Q6AIAhFxble+jS/l79rs6e2aqTgRXsoHhtyuFdkhfDHpCDvglvORfqemC+sOAMqNmIteO/cCjRZLRVOzKQFSs2Sl3UWqPsda6GQ1b1Ak2JNoXNuWRdyf8ca9W6KrZYfeTXlNGI5aJRHBNqytNZsRKGWwXN5x601Ck3106rU5nctECtUOgsP17QfAUStVrX7ytSeIWRAkHjtjqO3xTB4JPSPb8QOzf5ilhpbrTYAAAAASUVORK5CYII=');
+  background-position: right center;
+  background-repeat: no-repeat;
+  -moz-box-shadow: none;
+}
+
+.form-signup input:required:valid {
+  background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAB4AAAAeCAYAAAA7MK6iAAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4AocEikZtWABkQAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAABIUlEQVRIx+3WIUsEQRjG8f+ja1w41CRi0CImoyDCBf0A+gHEYFK0XxaLcvgNtNj8BhY1G66dxWIz2B6DKNxa5mBYDtPOgLBP2WUG3h/v7szsQps2iaKkxc0CsAksVSX9PB2ZnsydzHIucE5mIFPJbOVC92Qc0ONc6EkAK5kXmSI1OC1zGaGvMjs5Or2WGUXofA60H3X6JtPJgZ5GaCWzkQM9iMCRzG4OtCvzFcFnTRWeCddiwtyKzE+EPjTZ0bnMusyVzGw0XsgMo8f7KbPYJHwo8x2A9/FZK/OcdDHJdMLWGANPMkc1tJdqAW3XoFF0P0h6HMrc1/AqvIK1JupP/TF3O2HspioZpt6vq7VuP2TKXJ+6fZkLmUeZbvun2OZf5BdFrbkflmHqLQAAAABJRU5ErkJggg==');
+  background-position: right center;
+  background-repeat: no-repeat;
+}
