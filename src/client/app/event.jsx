@@ -372,7 +372,7 @@ class EventsSideBar extends React.Component {
         }
     }
 
-    disableEvent (seq,e) {
+    disableEvent = (seq,e) => {
         PubSub.publish('deleteEvent',{seq:seq});
         var newEvents=this.state.events.filter( el => el.seq !== seq );
         this.setState({events:newEvents});
@@ -391,7 +391,7 @@ class EventsSideBar extends React.Component {
         }
     }
 
-    showNewEvents () {
+    showNewEvents = () => {
         var events=getEventList(this.state.numNewEvents,this.state.lastSeq);
         if (this.state.events.length > 0) {
             for (var i=0;i<this.state.events.length;i++) {

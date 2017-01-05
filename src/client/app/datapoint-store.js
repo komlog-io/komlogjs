@@ -66,10 +66,7 @@ class DatapointStore {
             if (this.shouldRequest(request)) {
                 switch (request.requestType) {
                     case 'requestDatapointData':
-                        var datapointTsArray=[];
-                        Object.keys(this._datapointData[request.pid]).forEach( key => {
-                            datapointTsArray.push(key)
-                        });
+                        var datapointTsArray=Object.keys(this._datapointData[request.pid]);
                         if (datapointTsArray.length > 0) {
                             var maxDatapointTs=Math.max.apply(null, datapointTsArray);
                         } else {
@@ -238,9 +235,7 @@ function requestDatapointData (pid, interval, originalInterval, tid) {
         })
         .done(response => {
             datapointStore.storeDatapointData(pid,response);
-            var receivedTs=response.map(e => {
-                return e.ts
-            });
+            var receivedTs=response.map(e => e.ts);
             if (receivedTs.length>0) {
                 var maxTs=Math.max.apply(null, receivedTs);
                 var minTs=Math.min.apply(null, receivedTs);

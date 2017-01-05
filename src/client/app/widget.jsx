@@ -1459,7 +1459,7 @@ class WidgetDp extends React.Component {
 class WidgetMp extends React.Component {
     state = {
         interval: {its:null ,ets:null},
-        pids: [],
+        pids: null,
         widgetname: "",
         data: {},
         config: {},
@@ -1482,7 +1482,7 @@ class WidgetMp extends React.Component {
     }
 
     componentWillUnmount () {
-        this.subscriptionTokens[this.props.wid].map( d => {
+        this.subscriptionTokens[this.props.wid].forEach ( d => {
             PubSub.unsubscribe(d.token);
         });
         delete this.subscriptionTokens[this.props.wid];
@@ -1494,7 +1494,12 @@ class WidgetMp extends React.Component {
 
     componentWillReceiveProps (nextProps) {
         if (nextProps.shareCounter>this.state.shareCounter) {
-            this.setState({shareModal:true,shareCounter:nextProps.shareCounter, snapshotInterval:this.state.interval, livePrevious:this.state.live, live: false});
+            if (this.state.pids == null || this.state.pids.length == 0) {
+                this.props.barMessageCallback({message:{type:'danger',message:'No datapoints in graph'},messageTime:(new Date).getTime()});
+                this.setState({shareModal:false,shareCounter:nextProps.shareCounter});
+            } else {
+                this.setState({shareModal:true,shareCounter:nextProps.shareCounter, snapshotInterval:this.state.interval, livePrevious:this.state.live, live: false});
+            }
         } else if (nextProps.downloadCounter>this.state.downloadCounter) {
             this.downloadContent();
             this.setState({downloadCounter:nextProps.downloadCounter});
@@ -1511,6 +1516,7 @@ class WidgetMp extends React.Component {
 
     newIntervalCallback = (interval) => {
         var now=new Date().getTime()/1000;
+        var live = this.state.live;
         if (interval.hasOwnProperty('its') && interval.hasOwnProperty('ets')) {
             if (Math.abs(this.state.interval.ets-interval.ets)>1) {
                 if (interval.ets < now-30) {
@@ -1518,7 +1524,6 @@ class WidgetMp extends React.Component {
                 } else {
                     var live = true;
                 }
-                this.setState({live:live});
             }
             if (interval.ets > now) {
                 interval.ets = now;
@@ -1526,6 +1531,7 @@ class WidgetMp extends React.Component {
             for (var i=0;i<this.state.pids.length;i++) {
                 PubSub.publish('datapointDataReq',{pid:this.state.pids[i],interval:interval});
             }
+            this.setState({interval:interval, live:live});
             this.refreshData(interval);
         }
     }
@@ -1544,7 +1550,7 @@ class WidgetMp extends React.Component {
     }
 
     downloadContent = () => {
-        if (Object.keys(this.state.data).length>0) {
+        if (!(this.state.pids == null) && this.state.pids.length>0) {
             var x={};
             var x_final=[];
             var y_final=[];
@@ -1590,8 +1596,8 @@ class WidgetMp extends React.Component {
         switch (msgType) {
             case 'datapointDataUpdate':
                 var pid=msg.split('-')[1];
-                if (this.state.interval.its == undefined || this.state.interval.ets == undefined) {
-                    this.refreshData(data.interval);
+                if (this.state.interval.its == null || this.state.interval.ets == null) {
+                    this.refreshData(data.interval, pid);
                 } else if (this.state.live == true && data.interval.ets > this.state.interval.ets) {
                     var elapsedTs=data.interval.ets-this.state.interval.ets;
                     var newInterval={its:this.state.interval.its+elapsedTs, ets: data.interval.ets};
@@ -1618,6 +1624,7 @@ class WidgetMp extends React.Component {
             var widgetConfig=widgetStore._widgetConfig[this.props.wid];
             var datapoints={};
             var tokens = this.subscriptionTokens[this.props.wid];
+            var data = this.state.data;
             for (var i=0;i<widgetConfig.datapoints.length;i++) {
                 var dataFound = false;
                 var configFound = false;
@@ -1640,11 +1647,17 @@ class WidgetMp extends React.Component {
                     datapoints[pid]={pid:pid,color:datapoint.color,datapointname:datapoint.datapointname};
                 } else {
                     PubSub.publish('datapointConfigReq',{pid:pid});
+                }
+                if (!this.state.data.hasOwnProperty(pid)) {
+                    data[pid]=[];
                     PubSub.publish('datapointDataReq',{pid:pid});
                 }
             }
-            this.setState({config:datapoints, pids:widgetConfig.datapoints, widgetname:widgetConfig.widgetname});
+            this.setState({config:datapoints, pids:widgetConfig.datapoints, widgetname:widgetConfig.widgetname, data:data});
+        } else {
+            PubSub.publish('widgetConfigReq',{wid:this.props.wid});
         }
+
     }
 
     refreshData (interval, pid) {
@@ -1653,15 +1666,16 @@ class WidgetMp extends React.Component {
         } else {
             var selectedPids=this.state.pids;
         }
-        var data=this.state.data;
-        for (var i=0;i<selectedPids.length;i++) {
-            data[selectedPids[i]]=[];
-            data[selectedPids[i]]=getIntervalData(selectedPids[i], interval);
+        if (selectedPids != null) {
+            var data=this.state.data;
+            selectedPids.forEach( pid => {
+                data[pid]=getIntervalData(pid, interval);
+            });
+            this.setState({interval:interval,data:data});
         }
-        this.setState({interval:interval,data:data});
     }
 
-    onDrop (e) {
+    onDrop = (e) => {
         var id=e.dataTransfer.getData('id');
         if (id.length==32){
             var data={wid:this.props.wid, 'new_datapoints':[id]};
@@ -1678,18 +1692,28 @@ class WidgetMp extends React.Component {
         return false;
     }
 
-    cancelSnapshot () {
+    cancelSnapshot = () => {
         this.setState({shareModal:false, live: this.state.livePrevious});
     }
 
-    shareSnapshot () {
+    shareSnapshot = () => {
         var user_list=this.users.value.split(/[\s]+/);
         PubSub.publish('newWidgetMpSnapshot',{interval:this.state.snapshotInterval,user_list:user_list,wid:this.props.wid});
         this.setState({shareModal:false, live: this.state.livePrevious});
     }
 
     render () {
-        var summary=Object.keys(this.state.data).map( key => {
+        if (this.state.pids != null && this.state.pids.length == 0) {
+            return (
+              <div style={{ color:"#aaa", fontFamily:"sans-serif",fontSize:"18px", fontWeight:"800",lineHeight:"36px", padding:"72px 0 80px", textAlign:"center"}} onDrop={this.onDrop} onDragEnter={this.onDragEnter} onDragOver={this.onDragOver}>
+                Add datapoints by dragging them from your data model
+                <br/>
+                <ReactBootstrap.Glyphicon style={{fontSize:"48px"}} glyph="hand-left" />
+              </div>
+            );
+        }
+        var datapoints = this.state.pids;
+        var summary=datapoints.map( key => {
             if (this.state.config.hasOwnProperty(key)) {
                 var dpSummary=getDataSummary(this.state.data[key]);
                 var datapointStyle={backgroundColor: this.state.config[key].color, borderRadius: '5px'};
@@ -1710,7 +1734,7 @@ class WidgetMp extends React.Component {
                 );
             }
         });
-        var data=Object.keys(this.state.data).map( key => {
+        var data=datapoints.map( key => {
             if (this.state.config.hasOwnProperty(key)) {
                 return {pid:key,color:this.state.config[key].color,datapointname:this.state.config[key].datapointname,data:this.state.data[key]};
             }
@@ -1869,7 +1893,6 @@ class WidgetDsVariable extends React.Component {
     }
 
     identifyVariable = () => {
-        console.log('datapointname',this.datapointname);
         var datapointname=this.datapointname.value;
         if (datapointname.length>1){
             this.popover.hide();
