@@ -9,29 +9,6 @@ class UserStore {
         this._plansConfig = {};
         this._sharedUrisConfig = {};
 
-        var subscribedTopics = [
-            topics.MY_USER_CONFIG_REQUEST,
-            topics.SHARED_URIS_CONFIG_REQUEST,
-        ];
-
-        this.subscriptionTokens = subscribedTopics.map( topic => {
-            return {
-                token:PubSub.subscribe(topic,this.subscriptionHandler),
-                msg:topic
-            }
-        });
-
-    }
-
-    subscriptionHandler (msg, data) {
-        switch (msg) {
-            case topics.MY_USER_CONFIG_REQUEST:
-                processMsgMyUserConfigReq(data);
-                break;
-            case topics.SHARED_URIS_CONFIG_REQUEST:
-                processMsgSharedUrisConfigReq(data);
-                break;
-        }
     }
 
     storeUserConfig (data) {
@@ -230,7 +207,7 @@ function updateUserPassword (old_password, new_password, new_password2, callback
                 message:{type:'success',message:'Password updated successfully'},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE,payload);
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
             callback();
         })
         .fail( data => {
@@ -238,14 +215,14 @@ function updateUserPassword (old_password, new_password, new_password2, callback
                 message:{type:'danger',message:'Error updating password. Code: '+data.responseJSON.error},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE, payload);
+            PubSub.publish(topics.BAR_MESSAGE(), payload);
         });
     } else {
         var payload = {
             message:{type:'danger',message:'Error updating password. Invalid form data'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
         return false;
     }
 }
@@ -262,7 +239,7 @@ function deleteUser () {
             message:{type:'success',message:'So long, and thanks for all the fish.'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
         setTimeout(() => {window.location.href = "/";}, 2000);
     })
     .fail( data => {
@@ -270,7 +247,7 @@ function deleteUser () {
             message:{type:'danger',message:'Error deleting user. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 
@@ -287,14 +264,14 @@ function deleteKey (key) {
             message:{type:'success',message:'Key deleted'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error deleting key. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 
@@ -311,14 +288,14 @@ function suspendKey (key) {
             message:{type:'success',message:'Key suspended'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error suspending key. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 
@@ -335,14 +312,14 @@ function activateKey (key) {
             message:{type:'success',message:'Key activated'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error activating key. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 
@@ -366,14 +343,14 @@ function newKey (title, pubkey) {
             message:{type:'success',message:'New key added'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error adding key. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 
@@ -394,14 +371,14 @@ function upgradePlan(data, callback) {
                 message:{type:'success',message:'User plan modified successfully'},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE, payload);
+            PubSub.publish(topics.BAR_MESSAGE(), payload);
         })
         .fail( response => {
             var payload = {
                 message:{type:'danger',message:'Error modifying user plan. Code: '+response.responseJSON.error},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE, payload);
+            PubSub.publish(topics.BAR_MESSAGE(), payload);
         });
     } else {
         Stripe.card.createToken({
@@ -415,7 +392,7 @@ function upgradePlan(data, callback) {
                     message:{type:'danger',message:'Error in credit card. Code: '+response.error.message},
                     messageTime:(new Date).getTime()
                 };
-                PubSub.publish(topics.BAR_MESSAGE, payload);
+                PubSub.publish(topics.BAR_MESSAGE(), payload);
             } else {
                 var token = response.id;
                 var requestData={s:data.newPlan,t:token};
@@ -433,14 +410,14 @@ function upgradePlan(data, callback) {
                         message:{type:'success',message:'User plan modified successfully'},
                         messageTime:(new Date).getTime()
                     };
-                    PubSub.publish(topics.BAR_MESSAGE, payload);
+                    PubSub.publish(topics.BAR_MESSAGE(), payload);
                 })
                 .fail( response => {
                     var payload = {
                         message:{type:'danger',message:'Error modifying user plan. Code: '+response.responseJSON.error},
                         messageTime:(new Date).getTime()
                     };
-                    PubSub.publish(topics.BAR_MESSAGE, payload);
+                    PubSub.publish(topics.BAR_MESSAGE(), payload);
                 });
             }
         });
@@ -472,14 +449,14 @@ function deleteSharedUri(uri,user) {
             message:{type:'success',message:message},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error unsharing uri. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 
@@ -499,14 +476,14 @@ function shareNewUri(uri,users) {
             message:{type:'success',message:message},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error sharing uri. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 

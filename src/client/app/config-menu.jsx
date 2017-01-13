@@ -134,7 +134,6 @@ class AgentSubMenu extends React.Component {
         this.subscriptionTokens.forEach (d => {
             PubSub.unsubscribe(d.token);
         });
-        delete this.subscriptionTokens;
     }
 
     async refreshConfig () {
@@ -626,7 +625,6 @@ class BillingSubMenu extends React.Component {
         this.subscriptionTokens.forEach (d => {
             PubSub.unsubscribe(d.token);
         });
-        delete this.subscriptionTokens;
     }
 
     closeUpgradeMenu = () => {
@@ -950,7 +948,6 @@ class SharedUriSubMenu extends React.Component {
         this.subscriptionTokens.forEach ( d => {
             PubSub.unsubscribe(d.token);
         });
-        delete this.subscriptionTokens;
     }
 
     async refreshConfig () {

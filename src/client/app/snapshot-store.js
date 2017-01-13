@@ -10,14 +10,16 @@ class SnapshotStore {
         this._lastConfigUpdate = {};
         this.subscriptionTokens = [];
 
-        this.subscriptionTokens.push({
-            token:PubSub.subscribe(topics.SNAPSHOT_CONFIG_REQUEST,this.subscriptionHandler.bind(this)),
-            msg:topics.SNAPSHOT_CONFIG_REQUEST
-        });
+        var subscribedTopics = [
+            topics.SNAPSHOT_CONFIG_REQUEST,
+            topics.DELETE_SNAPSHOT,
+        ];
 
-        this.subscriptionTokens.push({
-            token:PubSub.subscribe(topics.DELETE_SNAPSHOT,this.subscriptionHandler.bind(this)),
-            msg:topics.DELETE_SNAPSHOT
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
         });
     }
 
@@ -143,7 +145,7 @@ function processMsgDeleteSnapshot(msgData) {
             message:{type:'danger',message:'Error deleting datasource. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE,payload);
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
     });
 }
 

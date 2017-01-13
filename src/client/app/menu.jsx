@@ -111,17 +111,30 @@ class SharedWithMeList extends React.Component {
 
     constructor (props) {
         super(props);
-        this.subscriptionTokens.push({token:PubSub.subscribe('sharedUrisWithMeUpdate', this.subscriptionHandler),msg:'sharedUrisWithMeUpdate'});
+
+        var subscribedTopics = [
+            topics.SHARED_URIS_WITH_ME_UPDATE,
+        ];
+
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
+        });
+
     }
 
     subscriptionHandler = (msg,data) => {
-        if (/sharedUrisWithMeUpdate/.test(msg)) {
+        var topic = topics.SHARED_URIS_WITH_ME_UPDATE;
+        var re = new RegExp(topic);
+        if (re.test(msg)) {
             this.updateSharedList();
         }
     }
 
     componentDidMount () {
-        PubSub.publish('sharedUrisWithMeReq',{});
+        PubSub.publish(topics.SHARED_URIS_WITH_ME_REQUEST,{});
     }
 
     updateSharedList () {
@@ -221,14 +234,14 @@ class MenuToolBar extends React.Component {
         } else {
             if (this.state.elementType == 'db') {
                 var data={dashboardname:name};
-                PubSub.publish('newDashboard',data);
+                PubSub.publish(topics.NEW_DASHBOARD,data);
             } else if (this.state.elementType == 'wg' ) {
                 var data={type:'mp',widgetname:name};
-                PubSub.publish('newWidget',data);
+                PubSub.publish(topics.NEW_WIDGET,data);
             } else {
                 var message = {type:'danger', message:'Unknown element type'};
                 var now = (new Date).getTime();
-                PubSub.publish('barMessage',{message:message,messageTime:now});
+                PubSub.publish(topics.BAR_MESSAGE(),{message:message,messageTime:now});
             }
             this.closeModal();
         }
@@ -287,9 +300,9 @@ class SideMenu extends React.Component {
     switchTab = (eventKey) => {
         if (eventKey != this.state.activeTab) {
             if (eventKey == 2) {
-                PubSub.publish('uriReq',{uri:''});
+                PubSub.publish(topics.URI_REQUEST,{uri:''});
             } else if (eventKey == 3) {
-                PubSub.publish('sharedUrisWithMeReq',{});
+                PubSub.publish(topics.SHARED_URIS_WITH_ME_REQUEST,{});
             }
             this.setState({activeTab:eventKey});
         }
@@ -328,239 +341,3 @@ export {
     SideMenu
 }
 
-
-
-/*
-var SideMenu = React.createClass({
-    getInitialState: function () {
-        return {
-            activeTab: 1
-        }
-    },
-    componentDidMount: function () {
-    },
-    switchTab: function (eventKey) {
-        if (eventKey != this.state.activeTab) {
-            if (eventKey == 2) {
-                PubSub.publish('uriReq',{uri:''})
-            } else if (eventKey == 3) {
-                PubSub.publish('sharedUrisWithMeReq',{})
-            }
-            this.setState({activeTab:eventKey})
-        }
-    },
-    render: function () {
-        return React.createElement('div', null,
-            React.createElement('div',{className:"brand"},"_< Komlog"),
-            React.createElement(MenuToolBar,null),
-            React.createElement(ReactBootstrap.Tabs, {activeKey:this.state.activeTab, onSelect: this.switchTab},
-              React.createElement(ReactBootstrap.Tab, {eventKey:1, title:"Dashboards"}, React.createElement(DashboardList)),
-              React.createElement(ReactBootstrap.Tab, {eventKey:2, title:"Data model"}, React.createElement(TreeItem, {uri:'', level:1})),
-              React.createElement(ReactBootstrap.Tab, {eventKey:3, title:"Shared with me"}, React.createElement(SharedWithMeList))
-            ),
-            React.createElement('div',{className:"side-footer"},
-              "Made with ",
-              React.createElement('span',{className:'glyphicon glyphicon-heart'}),
-              " by ",
-              React.createElement('span',{className:'side-footer-brand'},"Komlog")
-            )
-        );
-    }
-});
-
-var DashboardList = React.createClass ({
-    getInitialState: function () {
-        return {
-            activeBid: '0'
-        }
-    },
-    subscriptionTokens: [],
-    componentWillMount: function () {
-        this.subscriptionTokens.push({token:PubSub.subscribe('dashboardConfigUpdate', this.subscriptionHandler),msg:'dashboardConfigUpdate'});
-
-    },
-    subscriptionHandler: function (msg,data) {
-        if (/dashboardConfigUpdate/.test(msg)) {
-            this.updateDashboardList();
-        }
-    },
-    componentDidMount: function () {
-        PubSub.publish('dashboardsConfigReq',{})
-    },
-    switchDashboard: function (bid, event) {
-        event.preventDefault();
-        PubSub.publish('showDashboard',{bid:bid})
-        this.setState({activeBid:bid})
-    },
-    updateDashboardList: function () {
-        this.forceUpdate();
-    },
-    getDashboardList: function () {
-        var dashboards=[]
-        var activeBid = this.state.activeBid
-        for (var bid in dashboardStore._dashboardConfig) {
-            dashboards.push({bid:bid, dashboardname:dashboardStore._dashboardConfig[bid].dashboardname})
-        }
-        dashboards.sort(function (a,b) {
-            return a.dashboardname.localeCompare(b.dashboardname);
-        });
-        var listItems=$.map(dashboards, function (e,i) {
-            var className=activeBid == e.bid ? "list-item-active" : "list-item"
-            return React.createElement('li', {key:i+1, className:className, onClick:this.switchDashboard.bind(this, e.bid)},e.dashboardname);
-        }.bind(this))
-        var className=activeBid == 0 ? "list-item-active" : "list-item"
-        return React.createElement('ul', {className:"menu-list"},
-                 React.createElement('li', {key:0, className:className, onClick:this.switchDashboard.bind(this,'0')},"Home"),
-                 listItems
-               );
-    },
-    render: function () {
-        var dashboardList = this.getDashboardList()
-        return dashboardList
-    }
-});
-
-var SharedWithMeList = React.createClass ( {
-    getInitialState: function () {
-        return {
-            shared:{},
-        }
-    },
-    subscriptionTokens: [],
-    componentWillMount: function () {
-        this.subscriptionTokens.push({token:PubSub.subscribe('sharedUrisWithMeUpdate', this.subscriptionHandler),msg:'sharedUrisWithMeUpdate'});
-    },
-    subscriptionHandler: function (msg,data) {
-        if (/sharedUrisWithMeUpdate/.test(msg)) {
-            this.updateSharedList();
-        }
-    },
-    componentDidMount: function () {
-        PubSub.publish('sharedUrisWithMeReq',{})
-    },
-    updateSharedList: function () {
-        shared = getSharedUrisWithMe()
-        this.setState({shared:shared});
-    },
-    getSharedList: function () {
-        var users = [];
-        for(var key in this.state.shared){
-           users.push(key);
-        }
-        users = users.sort(function (a,b) {
-            return a>b ? 1: -1;
-        });
-        var items = users.map(function (user) {
-            var uris = this.state.shared[user]
-            uris = uris.sort(function (a,b) {
-                return a>b ? 1 : -1;
-            });
-            var userUris = uris.map( function (uri) {
-                return React.createElement('div',{key:uri},
-                  React.createElement(TreeItem, {key:uri,uri:uri,owner:user,level:1})
-                );
-            });
-            return React.createElement('li',{key:user,className:'shared-list'},
-              React.createElement('span',{className:"shared-list-user"},
-                React.createElement('span',{className:"glyphicon glyphicon-user"}),
-                React.createElement('span',{className:"shared-list-user-name"},user)
-              ),
-              userUris
-            );
-        }.bind(this));
-        return items;
-    },
-    render: function () {
-        var list = this.getSharedList()
-        return React.createElement('ul', {className:"menu-list"},
-          list
-      );
-    }
-});
-
-
-var MenuToolBar= React.createClass({
-    getInitialState: function () {
-        return {
-            inputName:'',
-            inputStyle:null,
-            inputPlaceholder:'Name',
-            showModal: false,
-            modalTitle: '',
-            elementType: '',
-        }
-    },
-    handleChange: function () {
-        name=this.refs.inputName.getValue();
-        this.setState({inputName:name,inputStyle:null})
-    },
-    newGraph: function () {
-        this.setState({showModal: true, modalTitle: 'New Graph', elementType: 'wg'});
-    },
-    newDashboard: function () {
-        this.setState({showModal: true, modalTitle: 'New Dashboard', elementType: 'db'});
-    },
-    closeModal: function () {
-        this.setState({inputName:'', inputStyle:'', showModal:false, modalTitle: '', elementType: ''});
-    },
-    newElement: function () {
-        name=this.refs.inputName.getValue();
-        if (name.length==0) {
-           this.setState({inputStyle:'error'})
-        } else {
-            if (this.state.elementType == 'db') {
-                data={dashboardname:name}
-                PubSub.publish('newDashboard',data)
-            } else if (this.state.elementType == 'wg' ) {
-                data={type:'mp',widgetname:name}
-                PubSub.publish('newWidget',data)
-            } else {
-                message = {type:'danger', message:'Unknown element type'}
-                now = (new Date).getTime()
-                PubSub.publish('barMessage',{message:message,messageTime:now})
-            }
-            this.closeModal()
-        }
-    },
-    render: function () {
-        inputOptions=React.createElement(ReactBootstrap.Dropdown, {id:"menu"},
-            React.createElement(ReactBootstrap.Dropdown.Toggle, {noCaret:true},
-                React.createElement(ReactBootstrap.Glyphicon, {glyph:"plus"})
-            ),
-            React.createElement(ReactBootstrap.Dropdown.Menu, null,
-                React.createElement(ReactBootstrap.MenuItem, {ref:"newGraph", onSelect:this.newGraph},
-                    React.createElement('span', null,
-                        React.createElement(ReactBootstrap.Glyphicon, {glyph:"equalizer"}), " New graph")
-                ),
-                React.createElement(ReactBootstrap.MenuItem, {ref:"newDashboard", onSelect:this.newDashboard},
-                    React.createElement('span', null,
-                        React.createElement(ReactBootstrap.Glyphicon, {glyph:"th-large"}), " New dashboard")
-                )
-            )
-        );
-        nameModal = React.createElement(ReactBootstrap.Modal, {show:this.state.showModal, onHide:this.closeModal, enforceFocus: true},
-            React.createElement(ReactBootstrap.Modal.Header, {closeButton: true}, 
-                React.createElement(ReactBootstrap.Modal.Title,null ,this.state.modalTitle)
-            ),
-            React.createElement(ReactBootstrap.Modal.Body, null,
-                React.createElement(ReactBootstrap.Input, {onChange:this.handleChange, placeholder:this.state.inputPlaceholder, value:this.state.inputName, bsStyle:this.state.inputStyle, ref:"inputName", type:"text", autoFocus:true})
-            ),
-            React.createElement(ReactBootstrap.Modal.Footer, null,
-                React.createElement(ReactBootstrap.Button, {bsStyle:"default", onClick:this.closeModal}, "Cancel"),
-                React.createElement(ReactBootstrap.Button, {bsStyle:"primary", onClick:this.newElement}, "Create")
-            )
-        );
-        return React.createElement('div',{className:'side-menu-toolbar'},
-            inputOptions,
-            nameModal
-        );
-    }
-});
-
-ReactDOM.render(
-    React.createElement(SideMenu,null)
-    ,
-    document.getElementById('side-menu')
-);
-
-*/

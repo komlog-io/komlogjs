@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import PubSub from 'pubsub-js';
 import * as ReactBootstrap from 'react-bootstrap';
+import {topics} from './types.js';
 
 class Alert extends React.Component {
 
@@ -73,18 +74,20 @@ class AlertArea extends React.Component {
     };
 
     state = {
-        topic:this.props.address !== null ? 'barMessage.'+this.props.address : 'barMessage',
+        topic:topics.BAR_MESSAGE(this.props.address),
         message: null,
         type: null,
         messageTime: 0
     };
 
-    subscriptionTokens = {};
+    subscriptionTokens = [];
 
     constructor (props) {
         super(props);
-        this.subscriptionTokens[this.state.topic]=[];
-        this.subscriptionTokens[this.state.topic].push({token:PubSub.subscribe(this.state.topic, this.subscriptionHandler),msg:this.state.topic});
+        this.subscriptionTokens.push({
+            token:PubSub.subscribe(this.state.topic, this.subscriptionHandler),
+            msg:this.state.topic
+        });
     }
 
     subscriptionHandler = (msg,data) => {
@@ -96,10 +99,9 @@ class AlertArea extends React.Component {
     }
 
     componentWillUnmount = () => {
-        this.subscriptionTokens[this.state.topic].map( d => {
+        this.subscriptionTokens.forEach( d => {
             PubSub.unsubscribe(d.token);
         });
-        delete this.subscriptionTokens[this.state.topic];
     }
 
     barMessage = (data) => {

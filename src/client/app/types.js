@@ -1,6 +1,12 @@
 
 const topics = {
-    BAR_MESSAGE:'barMessage',
+    BAR_MESSAGE: (id) => {
+        if (id) {
+            return ['barMessage',id].join('-');
+        } else {
+            return 'barMessage';
+        }
+    },
     CLOSE_SLIDE:'closeSlide',
     DASHBOARD_CONFIG_REQUEST:'dashboardConfigReq',
     DASHBOARD_CONFIG_UPDATE: (id) => {
@@ -62,7 +68,8 @@ const topics = {
     MY_PLAN_CONFIG_UPDATE:'myPlanConfigUpdate',
     MY_SHARED_URIS_CONFIG_UPDATE:'mySharedUrisConfigUpdate',
     NEW_DASHBOARD:'newDashboard',
-    NEW_EVENTS:'newEvents',
+    NEW_EVENTS_UPDATE:'newEventsUpdate',
+    NEW_EVENTS_REQUEST:'newEventsReq',
     NEW_SLIDE_LOADED:'newSlideLoaded',
     NEW_WIDGET:'newWidget',
     NEW_WIDGET_DS_SNAPSHOT:'newWidgetDsSnapshot',

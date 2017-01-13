@@ -28,11 +28,11 @@ class DatasourceStore {
             topics.DELETE_DATASOURCE
         ];
 
-        subscribedTopics.forEach( topic => {
-            this.subscriptionTokens.push({
-                token:PubSub.subscribe(topic,this.subscriptionHandler.bind(this)),
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
                 msg:topic
-            });
+            }
         });
 
     }
@@ -403,7 +403,7 @@ function processMsgDeleteDatasource(msgData) {
                     messageTime:(new Date).getTime()
                 };
             }
-            PubSub.publish(topics.BAR_MESSAGE,payload);
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
         });
     }
 }

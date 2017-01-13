@@ -29,11 +29,11 @@ class DatapointStore {
             topics.MODIFY_DATAPOINT
         ];
 
-        subscribedTopics.forEach( topic => {
-            this.subscriptionTokens.push({
-                token:PubSub.subscribe(topic,this.subscriptionHandler.bind(this)),
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
                 msg:topic
-            });
+            }
         });
 
     }
@@ -400,7 +400,7 @@ function processMsgMonitorDatapoint (data) {
                 message:{type:'success', message:'New datapoint monitored'},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE,payload);
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
             setTimeout(PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:responseData.pid, force:true}),5000);
             setTimeout(PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,{did:requestData.did, force:true}),5000);
             setTimeout(PubSub.publish(topics.DATASOURCE_DATA_REQUEST,{did:requestData.did, force:true}),5000);
@@ -410,7 +410,7 @@ function processMsgMonitorDatapoint (data) {
                 message:{type:'danger', message:'Error monitoring new datapoint. Code: '+responseData.responseJSON.error},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE,payload);
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
         });
     }
 }
@@ -454,7 +454,7 @@ function processMsgDeleteDatapoint(msgData) {
                     message:{type:'danger', message:'Error deleting datapoint. Code: '+data.responseJSON.error},
                     messageTime:(new Date).getTime()
                 };
-                PubSub.publish(topics.BAR_MESSAGE,payload);
+                PubSub.publish(topics.BAR_MESSAGE(),payload);
             });
     }
 }
@@ -474,7 +474,7 @@ function processMsgModifyDatapoint(msgData) {
                 message:{type:'danger', message:'Error updating datapoint. Code: '+data.responseJSON.error},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE, payload);
+            PubSub.publish(topics.BAR_MESSAGE(), payload);
         });
     }
 }

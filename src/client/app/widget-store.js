@@ -49,6 +49,7 @@ class WidgetStore {
                 processMsgNewWidgetDpSnapshot(data);
                 break;
             case topics.NEW_WIDGET_MP_SNAPSHOT:
+                console.log('mensaje recibido',msg,data);
                 processMsgNewWidgetMpSnapshot(data);
                 break;
         }
@@ -145,7 +146,7 @@ function processMsgNewWidget(msgData) {
             message:{type:'danger',message:'Error creating graph. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE,payload);
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
     });
 }
 
@@ -228,7 +229,7 @@ function processMsgDeleteWidget(msgData) {
                 message:{type:'danger',message:'Error deleting widget. Code: '+data.responseJSON.error},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE,payload);
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
         });
     }
 }
@@ -246,14 +247,14 @@ function processMsgNewWidgetDsSnapshot(msgData) {
             message:{type:'success',message:'Snapshot shared successfully'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE,payload);
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE,payload);
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
     });
 }
 
@@ -270,14 +271,14 @@ function processMsgNewWidgetDpSnapshot(msgData) {
             message:{type:'success',message:'Snapshot shared successfully'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE,payload);
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE,payload);
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
     });
 }
 
@@ -294,14 +295,14 @@ function processMsgNewWidgetMpSnapshot(msgData) {
             message:{type:'success',message:'Snapshot shared successfully'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE,payload);
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE,payload);
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
     });
 }
 

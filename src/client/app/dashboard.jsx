@@ -12,10 +12,7 @@ class Dashboard extends React.Component {
         loading: true,
     }
 
-    constructor (props) {
-        super(props);
-        this.subscriptionTokens = {};
-    }
+    subscriptionTokens = [];
 
     async initialization () {
         var newState = {};
@@ -38,7 +35,7 @@ class Dashboard extends React.Component {
             newState.dashboardname = 'Main Dashboard';
         }
 
-        this.subscriptionTokens[this.props.bid] = subscribedTopics.map( topic => {
+        this.subscriptionTokens = subscribedTopics.map( topic => {
             return {
                 token:PubSub.subscribe(topic,this.subscriptionHandler),
                 msg:topic
@@ -68,10 +65,9 @@ class Dashboard extends React.Component {
     }
 
     componentWillUnmount () {
-        this.subscriptionTokens[this.props.bid].forEach( d => {
+        this.subscriptionTokens.forEach( d => {
             PubSub.unsubscribe(d.token)
         });
-        delete this.subscriptionTokens[this.props.bid];
     }
 
     async dashboardConfigUpdate () {

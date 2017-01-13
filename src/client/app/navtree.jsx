@@ -7,8 +7,6 @@ import {topics} from './types.js';
 
 class TreeItem extends React.Component {
 
-    subscriptionTokens = [];
-
     constructor (props) {
         super(props);
         var path=props.uri.split('.');
@@ -34,12 +32,6 @@ class TreeItem extends React.Component {
 
     componentDidMount () {
         this.refreshTree();
-    }
-
-    componentWillUnmount () {
-        this.subscriptionTokens.forEach( d => {
-            PubSub.unsubscribe(d.token);
-        });
     }
 
     onDragStart = (event) => {

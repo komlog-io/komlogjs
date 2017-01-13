@@ -12,7 +12,6 @@ class DashboardStore {
         this._lastGlobalConfigUpdate = null;
 
         var subscribedTopics = [
-            topics.DASHBOARDS_CONFIG_REQUEST,
             topics.DASHBOARD_CONFIG_REQUEST,
             topics.NEW_DASHBOARD,
             topics.MODIFY_DASHBOARD,
@@ -30,9 +29,6 @@ class DashboardStore {
 
     subscriptionHandler (msg, data) {
         switch (msg) {
-            case topics.DASHBOARDS_CONFIG_REQUEST:
-                processMsgDashboardsConfigRequest();
-                break;
             case topics.DASHBOARD_CONFIG_REQUEST:
                 processMsgDashboardConfigRequest(data);
                 break;
@@ -170,14 +166,14 @@ function processMsgNewDashboard (msgData) {
             message:{type:'success',message:'Dashboard created successfully'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error creating dashboard. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 
@@ -261,7 +257,7 @@ function processMsgDeleteDashboard (msgData) {
                 message:{type:'danger',message:'Error deleting dashboard. Code: '+data.responseJSON.error},
                 messageTime:(new Date).getTime()
             };
-            PubSub.publish(topics.BAR_MESSAGE,payload);
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
         });
     }
 }

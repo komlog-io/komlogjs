@@ -11,6 +11,7 @@ class EventStore {
 
         var subscribedTopics = [
             topics.DELETE_EVENT,
+            topics.NEW_EVENTS_REQUEST,
         ];
 
         this.subscriptionTokens = subscribedTopics.map( topic => {
@@ -24,6 +25,9 @@ class EventStore {
 
     subscriptionHandler (msg, data) {
         switch (msg) {
+            case topics.NEW_EVENTS_REQUEST:
+                processMsgNewEventsRequest(data);
+                break;
             case topics.DELETE_EVENT:
                 processMsgDeleteEvent(data);
                 break;
@@ -100,7 +104,7 @@ class EventStore {
                     var result = this.storeEvents(response);
                     this.updateLastIntervalUpdate(ets);
                     if (result.modified) {
-                        PubSub.publish(topics.NEW_EVENTS,{});
+                        PubSub.publish(topics.NEW_EVENTS_UPDATE,{});
                     }
                     var events = this._events.filter ( ev => {
                         if (ets && ev.ets > ets) {
@@ -161,6 +165,10 @@ function getEvents(ets, its, force) {
     return eventStore.getEvents({ets:ets, its:its, force:force});
 }
 
+function processMsgNewEventsRequest(data) {
+    eventStore.getEvents({ets:data.ets, its:data.its, force:data.force});
+}
+
 function processMsgDeleteEvent(msgData) {
     if (msgData.hasOwnProperty('seq')) {
         $.ajax({
@@ -189,14 +197,14 @@ function sendEventResponse(seq, responseData) {
             message:{type:'success',message:'Thank you for your response.'},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
         var payload = {
             message:{type:'danger',message:'Error sending response. Code: '+data.responseJSON.error},
             messageTime:(new Date).getTime()
         };
-        PubSub.publish(topics.BAR_MESSAGE, payload);
+        PubSub.publish(topics.BAR_MESSAGE(), payload);
     });
 }
 
