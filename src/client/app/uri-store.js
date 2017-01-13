@@ -43,27 +43,29 @@ class UriStore {
 
     getSharedUrisWithMe ({force} = {}) {
         var now = new Date().getTime();
-        var elapsed = now - this._lastSharedWithMeRequest;
+        var elapsed = now - this._lastSharedWithMeRequestms;
         if (force || elapsed > this.minSharedWithMeRequestIntervalms) {
-            var info;
             var promise = new Promise ( (resolve, reject) => {
                 $.ajax({
                     url: '/var/uri/sharedwithme',
                     dataType: 'json',
                 })
                 .done( data => {
-                    this._lastSharedWithMeRequest = now;
-                    result = this.storeSharedUrisWithMe(data);
+                    this._lastSharedWithMeRequestms = now;
+                    var result = this.storeSharedUrisWithMe(data);
                     if (result.modified) {
                         var topic = topics.SHARED_URIS_WITH_ME_UPDATE;
                         PubSub.publish(topic,{});
                     }
-                    resolve(this._sharedWithMe);
+                    resolve(this._sharedUrisWithMe);
+                }).
+                fail( data => {
+                    reject(data);
                 });
             });
             return promise;
         } else {
-            return Promise.resolve(this._sharedWithMe);
+            return Promise.resolve(this._sharedUrisWithMe);
         }
     }
 
@@ -95,12 +97,15 @@ class UriStore {
         } else {
             indexKey=uri;
         }
-        if (!(index.hasOwnProperty('uriIndex') && index.uriIndex.hasOwnProperty(indexKey)) || elapsed > this.minUriRequestIntervalms){
+        if (!(index && index.hasOwnProperty('uriIndex') && index.uriIndex.hasOwnProperty(indexKey)) || elapsed > this.minUriRequestIntervalms){
             var promise = new Promise ( (resolve,reject) => {
                 var req = this.requestUri({uri:uri, owner:owner});
                 req.done( data => {
                     this._lastUriRequestms = new Date().getTime();
                     this.storeData({data:data, owner:owner});
+                    if (!index) {
+                        index = this._remoteIndices[owner];
+                    }
                     resolve(index.uriIndex[indexKey]);
                 }).fail( (jqXHR, textStatus) => {
                     this.deleteNodeInfoByUri({uri:uri, owner:owner});
@@ -204,10 +209,10 @@ class UriStore {
         }
     }
 
-    storeSharedUris (data) {
+    storeSharedUrisWithMe (data) {
         var result = {};
-        var actualUsers = Object.keys(this._sharedUrisWithMe).sort((a,b) => a-b);
-        var newUsers = Object.keys(data).sort((a,b) => a-b);
+        var actualUsers = Object.keys(this._sharedUrisWithMe);
+        var newUsers = Object.keys(data);
         var addedSome = newUsers.some( user => actualUsers.indexOf(user) < 0);
         if (addedSome) {
             result.modified = true;
@@ -234,7 +239,9 @@ class UriStore {
                 result.modified = true;
             }
         }
-        this._sharedUrisWithMe = data;
+        if (result.modified) {
+            this._sharedUrisWithMe = data;
+        }
         return result;
     }
 

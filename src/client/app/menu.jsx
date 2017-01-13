@@ -109,8 +109,8 @@ class SharedWithMeList extends React.Component {
 
     subscriptionTokens = [];
 
-    constructor (props) {
-        super(props);
+    async initialization () {
+        var shared = await getSharedUrisWithMe();
 
         var subscribedTopics = [
             topics.SHARED_URIS_WITH_ME_UPDATE,
@@ -123,30 +123,29 @@ class SharedWithMeList extends React.Component {
             }
         });
 
+        this.setState({shared:shared});
+
     }
 
     subscriptionHandler = (msg,data) => {
-        var topic = topics.SHARED_URIS_WITH_ME_UPDATE;
-        var re = new RegExp(topic);
-        if (re.test(msg)) {
-            this.updateSharedList();
+        switch (msg) {
+            case topics.SHARED_URIS_WITH_ME_UPDATE:
+                this.updateSharedList();
+                break;
         }
     }
 
     componentDidMount () {
-        PubSub.publish(topics.SHARED_URIS_WITH_ME_REQUEST,{});
+        this.initialization();
     }
 
-    updateSharedList () {
-        var shared = getSharedUrisWithMe();
+    async updateSharedList () {
+        var shared = await getSharedUrisWithMe();
         this.setState({shared:shared});
     }
 
     getSharedList () {
-        var users = [];
-        for(var key in this.state.shared){
-           users.push(key);
-        }
+        var users = Object.keys(this.state.shared);
         users = users.sort( (a,b) => {
             return a>b ? 1: -1;
         });
