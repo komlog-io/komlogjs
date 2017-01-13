@@ -699,12 +699,24 @@ let d3Linegraph = {
             for (var j=0;j<data.length;j++) {
                 var i = bisectDate(data[j].data, x0,1);
                 i=i<1 ? 1 : i==data[j].data.length ? data[j].data.length -1 : i;
-                var d0 = data[j].data[i - 1],
-                    d1 = data[j].data[i];
-                var d = x0 - d0.ts > d1.ts - x0 ? d1 : d0;
-                var pointX=x(new Date(d.ts*1000));
-                var pointY=y(d.value);
-                var rectWidth=(d.value.toString().length+1)*10;
+                if (data[j].data.length > 1) {
+                    var d0 = data[j].data[i - 1],
+                        d1 = data[j].data[i];
+                    var d = x0 - d0.ts > d1.ts - x0 ? d1 : d0;
+                    var pointX=x(new Date(d.ts*1000));
+                    var pointY=y(d.value);
+                    var rectWidth=(d.value.toString().length+1)*10;
+                } else if (data[j].data.length == 1) {
+                    var d = data[j].data[0];
+                    var pointX=x(new Date(d.ts*1000));
+                    var pointY=y(d.value);
+                    var rectWidth=(d.value.toString().length+1)*10;
+                } else {
+                    var d = {value:''};
+                    var pointX = -10;
+                    var pointY = -10;
+                    var rectWidth = 0
+                }
                 xOffset=pointX+rectWidth+5 > width ? width-pointX-rectWidth-5 : 0;
                 d3.select(el).select("#dp-"+data[j].pid)
                     .attr("transform", "translate(" + pointX + "," + pointY + ")");
@@ -1255,12 +1267,24 @@ let d3SummaryLinegraph = {
             for (var j=0;j<datapoints.length;j++) {
                 var i = bisectDate(datapoints[j].data, x0,1);
                 i=i<1 ? 1 : i==datapoints[j].data.length ? datapoints[j].data.length -1 : i;
-                var d0 = datapoints[j].data[i - 1],
-                    d1 = datapoints[j].data[i];
-                var d = x0 - d0[0] > d1[0] - x0 ? d1 : d0;
-                var pointX=x(new Date(d[0]*1000));
-                var pointY=y(d[1]);
-                var rectWidth=(d[1].toString().length+1)*10;
+                if (datapoints[j].data.length > 1) {
+                    var d0 = datapoints[j].data[i - 1],
+                        d1 = datapoints[j].data[i];
+                    var d = x0 - d0[0] > d1[0] - x0 ? d1 : d0;
+                    var pointX=x(new Date(d[0]*1000));
+                    var pointY=y(d[1]);
+                    var rectWidth=(d[1].toString().length+1)*10;
+                } else if (datapoints[j].data.length == 1) {
+                    var d = datapoints[j].data[0];
+                    var pointX=x(new Date(d[0]*1000));
+                    var pointY=y(d[1]);
+                    var rectWidth=(d[1].toString().length+1)*10;
+                } else {
+                    var d = [1,''];
+                    var pointX = -10;
+                    var pointY = -10;
+                    var rectWidth = 0
+                }
                 xOffset=pointX+rectWidth+5 > width ? width-pointX-rectWidth-5 : 0;
                 d3.select(el).select("#dp-"+datapoints[j].color.slice(1,datapoints[j].color.length))
                     .attr("transform", "translate(" + pointX + "," + pointY + ")");
