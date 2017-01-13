@@ -7,8 +7,8 @@ var APP_DIR = path.resolve(__dirname, 'src/client/app');
 var config = {
   entry: {
       'root': APP_DIR + '/root.jsx',
-      'home': APP_DIR + '/index.jsx',
-      'config': APP_DIR + '/config.jsx'
+      'home': ['babel-polyfill',APP_DIR + '/index.jsx'],
+      'config': ['babel-polyfill', APP_DIR + '/config.jsx']
   },
   output: {
     path: BUILD_DIR,
