@@ -1,141 +1,164 @@
 import $ from 'jquery';
-import jQuery from 'jquery';
 import PubSub from 'pubsub-js';
+import {topics} from './types.js';
 
 class EventStore {
     constructor () {
+        this.minRequestIntervalms = 180000;
+        this._lastIntervalUpdate = {};
         this._events = [];
-        this.subscriptionTokens = [];
         this.activeLoop = true;
-        this.lastRequest = null;
 
-        this.subscriptionTokens.push({token:PubSub.subscribe('deleteEvent', this.subscriptionHandler.bind(this)),msg:'deleteEvent'});
+        var subscribedTopics = [
+            topics.DELETE_EVENT,
+        ];
+
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
+        });
 
     }
 
     subscriptionHandler (msg, data) {
         switch (msg) {
-            case 'deleteEvent':
+            case topics.DELETE_EVENT:
                 processMsgDeleteEvent(data);
                 break;
         }
     }
 
-    shouldRequest () {
-        var now = new Date();
-        if (this.lastRequest == null){
-            return true;
+    updateLastIntervalUpdate (ts) {
+        var now=new Date().getTime();
+        if (!ts) {
+            ts = 0;
+        }
+        this._lastIntervalUpdate[ts] = now;
+    }
+
+    getLastIntervalUpdate (ts) {
+        if (!ts) {
+            ts = 0;
+        }
+        if (this._lastIntervalUpdate.hasOwnProperty(ts)) {
+            return this._lastIntervalUpdate[ts];
         } else {
-            var nextRequest=new Date(this.lastRequest.getTime()+60);
-            if (nextRequest < now ) {
-                return true;
-            } else {
-                return false;
-            }
+            return 0;
         }
     }
 
-    requestLoop () {
-        var now=new Date().getTime()/1000;
-        if (this.shouldRequest()) {
-            requestEvents();
+    shouldRequest () {
+        var last = this.getLastIntervalUpdate();
+        if (last != 0) {
+            var now = new Date().getTime();
+            var elapsed = now - last;
+            if (elapsed >= this.minRequestIntervalms) {
+                return true;
+            }
         }
-        if (this.activeLoop === true ) {
+        return false;
+    }
+
+    requestLoop () {
+        if (this.shouldRequest()) {
+            var eventsTs = this._events.map(ev => ev.ts);
+            var ets = Math.max.apply(null,eventsTs);
+            this.getEvents({its:ets});
+        }
+        if (this.activeLoop) {
             setTimeout(this.requestLoop.bind(this),60000);
         }
     }
 
     deleteEvent (seq) {
-        var events=this._events.filter( el => el.seq !== seq);
+        var events=this._events.filter( el => el.seq != seq);
         this._events=events;
     }
+
+    getEvents ({ets, its, force}={}) {
+        var now=new Date().getTime();
+        var elapsed = now - this.getLastIntervalUpdate(ets);
+        if (force == true || elapsed >= this.minRequestIntervalms) {
+            console.log('getEvents remote',ets,its,force);
+            var events;
+            var parameters = {}
+            if (ets) {
+                parameters.ets = ets;
+            }
+            if (its) {
+                parameters.its = its;
+            }
+            var promise = new Promise( (resolve, reject) => {
+                $.ajax({
+                    url: '/var/usr/ev/',
+                    dataType: 'json',
+                    data: parameters,
+                })
+                .done( response => {
+                    var result = this.storeEvents(response);
+                    this.updateLastIntervalUpdate(ets);
+                    if (result.modified) {
+                        PubSub.publish(topics.NEW_EVENTS,{});
+                    }
+                    var events = this._events.filter ( ev => {
+                        if (ets && ev.ets > ets) {
+                            return false;
+                        } else if (its && ev.its < its) {
+                            return false;
+                        }
+                        return true;
+                    });
+                    resolve(events);
+                });
+            });
+            return promise;
+        } else {
+            console.log('getEvents local',ets,its,force);
+            var events = this._events.filter ( ev => {
+                if (ets && ev.ets > ets) {
+                    return false;
+                } else if (its && ev.its < its) {
+                    return false;
+                }
+                return true;
+            });
+            return Promise.resolve(events);
+        }
+    }
+
+    storeEvents (events) {
+        var result = {};
+        var eventsTs = events.map(ev => ev.ts);
+        var ets = Math.max.apply(null,eventsTs);
+        var its = Math.min.apply(null,eventsTs);
+        var oldEvents = this._events.filter ( ev => ev.ts <= ets && ev.ts >= its);
+        var deletedEvents = oldEvents.filter( ev => !(events.some(ev2 => ev2.seq == ev.seq)));
+        var newEvents = events.filter( ev => !(oldEvents.some(ev2 => ev2.seq == ev.seq)));
+        if (deletedEvents.length > 0) {
+            result.modified = true;
+            deletedEvents.forEach ( ev => {
+                this._events.push(ev);
+            });
+        }
+        if (newEvents.length > 0) {
+            result.modified = true;
+            newEvents.forEach( ev => {
+                this._events.push(ev);
+            });
+        }
+        return result;
+    }
+
 }
 
 var eventStore = new EventStore();
 eventStore.requestLoop()
 
-function requestEvents () {
-    var parameters={}
-    if (eventStore._events.length>0) {
-        parameters.its=eventStore._events[eventStore._events.length-1].ts;
-    }
-    $.ajax({
-        url: '/var/usr/ev/',
-        dataType: 'json',
-        data: parameters,
-    })
-    .done( response => {
-        storeEvents(response);
-    });
-}
 
-function storeEvents (data) {
-    var newEvents=false;
-    for (var i=data.length;i>0;i--) {
-        if (eventStore._events.length==0) {
-            eventStore._events.push(data[i-1]);
-            newEvents=true;
-        } else {
-            for (var j=eventStore._events.length;j>0;j--) {
-                if (eventStore._events[j-1].ts<=data[i-1].ts && eventStore._events[j-1].seq!=data[i-1].seq && (j==eventStore._events.length || eventStore._events[j].ts>data[i-1].ts)) {
-                    eventStore._events.splice(j,0,data[i-1]);
-                    newEvents=true;
-                }
-            }
-        }
-    }
-    if (newEvents == true) {
-        sendNewEventsMessage();
-    }
-}
-
-function sendNewEventsMessage () {
-    PubSub.publish('newEvents',{});
-}
-
-function getEventList (numElem, lastSeq) {
-    console.log('getEventList',numElem,lastSeq,eventStore._events);
-    var events=[];
-    if (eventStore._events.length == 0) {
-        return events;
-    }
-    var lastIndex = 0;
-    if ( lastSeq != null) {
-        for (var i=eventStore._events.length;i>0;i--) {
-            if (eventStore._events[i-1].seq == lastSeq) {
-                lastIndex=i;
-                break;
-            }
-        }
-    }
-    if (numElem == null) {
-        var firstIndex = eventStore._events.length -1;
-    } else {
-        var firstIndex = lastIndex+numElem;
-        if (firstIndex>eventStore._events.length-1) {
-            firstIndex = eventStore._events.length-1;
-        }
-    }
-    for (var j=firstIndex;j>=lastIndex;j--) {
-        events.push(eventStore._events[j]);
-    }
-    return events;
-}
-
-function getNumEventsNewerThan (lastSeq) {
-    if (eventStore._events.length == 0) {
-        return 0;
-    } else if (lastSeq == null) {
-        return 0;
-    } else {
-        for (var i=eventStore._events.length;i>=0;i--) {
-            if (eventStore._events[i-1].seq == lastSeq) {
-                var numEvents=eventStore._events.length-i;
-                break;
-            }
-        }
-    }
-    return numEvents;
+function getEvents(ets, its, force) {
+    return eventStore.getEvents({ets:ets, its:its, force:force});
 }
 
 function processMsgDeleteEvent(msgData) {
@@ -162,181 +185,23 @@ function sendEventResponse(seq, responseData) {
         data: JSON.stringify(responseData),
     })
     .done( data => {
-        PubSub.publish('barMessage',{message:{type:'success',message:'Thank you for your response.'},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'success',message:'Thank you for your response.'},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE, payload);
     })
     .fail( data => {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error sending response. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'danger',message:'Error sending response. Code: '+data.responseJSON.error},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE, payload);
     });
 }
 
 export {
-    getEventList,
-    getNumEventsNewerThan,
+    getEvents,
     sendEventResponse
 }
 
-
-/*
-function EventStore () {
-    this._events = [];
-    this.subscriptionTokens = [];
-    this.activeLoop = true;
-
-    this.subscriptionTokens.push({token:PubSub.subscribe('deleteEvent', this.subscriptionHandler.bind(this)),msg:'deleteEvent'});
-
-}
-
-EventStore.prototype = {
-    subscriptionHandler: function (msg, data) {
-        switch (msg) {
-            case 'deleteEvent':
-                processMsgDeleteEvent(data)
-                break;
-        }
-    },
-    shouldRequest: function () {
-        var now = new Date();
-        if (typeof this.lastRequest === "undefined"){
-            return true;
-        } else {
-            nextRequest=new Date(this.lastRequest.getTime()+60)
-            if (nextRequest < now ) {
-                return true;
-            } else {
-                return false;
-            }
-        }
-    },
-    requestLoop: function () {
-        now=new Date().getTime()/1000;
-        if (this.shouldRequest()) {
-            requestEvents()
-        }
-        if (this.activeLoop === true ) {
-            setTimeout(this.requestLoop.bind(this),60000)
-        }
-    },
-    deleteEvent: function (seq) {
-        events=this._events.filter( function (el) {
-            return el.seq !== seq
-        });
-        this._events=events
-    }
-};
-
-var eventStore = new EventStore();
-eventStore.requestLoop()
-
-function requestEvents () {
-    parameters={}
-    if (eventStore._events.length>0) {
-        parameters.its=eventStore._events[eventStore._events.length-1].ts
-    }
-    $.ajax({
-        url: '/var/usr/ev/',
-        dataType: 'json',
-        data: parameters,
-    })
-    .done(function (response) {
-        storeEvents(response)
-    })
-}
-
-function storeEvents (data) {
-    newEvents=false;
-    for (var i=data.length;i>0;i--) {
-        if (eventStore._events.length==0) {
-            eventStore._events.push(data[i-1])
-            newEvents=true;
-        } else {
-            for (var j=eventStore._events.length;j>0;j--) {
-                if (eventStore._events[j-1].ts<=data[i-1].ts && eventStore._events[j-1].seq!=data[i-1].seq && (j==eventStore._events.length || eventStore._events[j].ts>data[i-1].ts)) {
-                    eventStore._events.splice(j,0,data[i-1])
-                    newEvents=true
-                }
-            }
-        }
-    }
-    if (newEvents == true) {
-        sendNewEventsMessage()
-    }
-}
-
-function sendNewEventsMessage () {
-    PubSub.publish('newEvents',{})
-}
-
-function getEventList (numElem, lastSeq) {
-    events=[]
-    if (eventStore._events.length == 0) {
-        return events
-    } else if (typeof lastSeq === "undefined") {
-        lastIndex=0
-    } else {
-        for (var i=eventStore._events.length;i>0;i--) {
-            if (eventStore._events[i-1].seq == lastSeq) {
-                lastIndex=i;
-                break;
-            }
-        }
-    }
-    if (typeof lastIndex === "undefined" ) {
-        lastIndex=0
-    }
-    firstIndex=lastIndex+numElem
-    if (firstIndex>eventStore._events.length-1|| isNaN(firstIndex) ) {
-        firstIndex=eventStore._events.length-1;
-    }
-    for (var j=firstIndex;j>=lastIndex;j--) {
-        events.push(eventStore._events[j])
-    }
-    return events
-}
-
-function getNumEventsNewerThan (lastSeq) {
-    if (eventStore._events.length == 0) {
-        return 0
-    } else if (typeof lastSeq === "undefined") {
-        return 0
-    } else {
-        for (var i=eventStore._events.length;i>=0;i--) {
-            if (eventStore._events[i-1].seq == lastSeq) {
-                numEvents=eventStore._events.length-i
-                break;
-            }
-        }
-    }
-    return numEvents
-}
-
-function processMsgDeleteEvent(msgData) {
-    if (msgData.hasOwnProperty('seq')) {
-        $.ajax({
-                url: '/var/usr/ev/'+msgData.seq,
-                dataType: 'json',
-                type: 'DELETE',
-            })
-            .then(function(data){
-                eventStore.deleteEvent(msgData.seq)
-            }, function(data){
-                console.log('server Delete Event error',data)
-            });
-    }
-}
-
-function sendEventResponse(seq, responseData) {
-    url='/var/usr/ev/'+seq
-    $.ajax({
-        url: url,
-        dataType: 'json',
-        type: 'POST',
-        data: JSON.stringify(responseData),
-    })
-    .done(function (data) {
-        PubSub.publish('barMessage',{message:{type:'success',message:'Thank you for your response.'},messageTime:(new Date).getTime()});
-    })
-    .fail(function (data) {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error sending response. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-    })
-}
-*/

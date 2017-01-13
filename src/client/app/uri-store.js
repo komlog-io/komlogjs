@@ -1,56 +1,119 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
+import {topics, nodes} from './types.js';
 
 class UriStore {
     constructor () {
+        this.minUriRequestIntervalms = 0;
+        this.minSharedWithMeRequestIntervalms = 60000;
         this._localIndex={uriIndex:{},idIndex:{}}
         this._remoteIndices={}
         this._sharedUrisWithMe={}
-        this.subscriptionTokens = [];
-        this.subscriptionTokens.push({token:PubSub.subscribe('uriReq', this.subscriptionHandler.bind(this)),msg:'UriReq'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('uriActionReq', this.subscriptionHandler.bind(this)),msg:'UriActionReq'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('sharedUrisWithMeReq', this.subscriptionHandler.bind(this)),msg:'SharedUrisWithMeReq'});
+        this._lastUriRequestms = 0;
+        this._lastSharedWithMeRequestms = 0;
+
+        var subscribedTopics = [
+            topics.URI_ACTION_REQUEST,
+            topics.URI_REQUEST,
+            topics.SHARED_URIS_WITH_ME_REQUEST,
+        ];
+
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
+        });
+
     }
 
     subscriptionHandler (msg, data) {
         switch (msg) {
-            case 'uriReq':
+            case topics.URI_REQUEST:
                 processMsgUriReq(data);
                 break;
-            case 'uriActionReq':
+            case topics.URI_ACTION_REQUEST:
                 processMsgUriActionReq(data);
                 break;
-            case 'sharedUrisWithMeReq':
+            case topics.SHARED_URIS_WITH_ME_REQUEST:
                 processMsgSharedUrisWithMeReq(data);
                 break;
         }
     }
 
-    getSharedUris () {
-        return this._sharedUrisWithMe;
-    }
-
-    setSharedUris (data) {
-        return this._sharedUrisWithMe=data;
-    }
-
-    getNodeInfoByUri (uri, owner) {
-        if (owner == undefined) {
-            if (uri == '') {
-                return this._localIndex.uriIndex['.'];
-            } else {
-                return this._localIndex.uriIndex[uri];
-            }
+    getSharedUrisWithMe ({force} = {}) {
+        var now = new Date().getTime();
+        var elapsed = now - this._lastSharedWithMeRequest;
+        if (force || elapsed > this.minSharedWithMeRequestIntervalms) {
+            var info;
+            var promise = new Promise ( (resolve, reject) => {
+                $.ajax({
+                    url: '/var/uri/sharedwithme',
+                    dataType: 'json',
+                })
+                .done( data => {
+                    this._lastSharedWithMeRequest = now;
+                    result = this.storeSharedUrisWithMe(data);
+                    if (result.modified) {
+                        var topic = topics.SHARED_URIS_WITH_ME_UPDATE;
+                        PubSub.publish(topic,{});
+                    }
+                    resolve(this._sharedWithMe);
+                });
+            });
+            return promise;
         } else {
-            if (this._remoteIndices.hasOwnProperty(owner)) {
-                return this._remoteIndices[owner].uriIndex[uri];
-            } else {
-                return null;
-            }
+            return Promise.resolve(this._sharedWithMe);
         }
     }
 
-    getNodeInfoById (id, owner) {
+    requestUri ({uri, owner}={}) {
+        if (owner != undefined) {
+            var p_uri = owner+":"+uri;
+        } else {
+            var p_uri = uri;
+        }
+        var parameters={'uri':p_uri};
+        return $.ajax({
+            url: '/var/uri/',
+            dataType: 'json',
+            data: parameters,
+        });
+    }
+
+    getNodeInfoByUri ({uri, owner}={}) {
+        var now = new Date().getTime();
+        var elapsed = now - this._lastUriRequestms;
+        var index, indexKey;
+        if (owner == undefined) {
+            index = this._localIndex;
+        } else {
+            index = this._remoteIndices[owner];
+        }
+        if (uri == '' && owner == undefined) {
+            indexKey = '.';
+        } else {
+            indexKey=uri;
+        }
+        if (!(index.hasOwnProperty('uriIndex') && index.uriIndex.hasOwnProperty(indexKey)) || elapsed > this.minUriRequestIntervalms){
+            var promise = new Promise ( (resolve,reject) => {
+                var req = this.requestUri({uri:uri, owner:owner});
+                req.done( data => {
+                    this._lastUriRequestms = new Date().getTime();
+                    this.storeData({data:data, owner:owner});
+                    resolve(index.uriIndex[indexKey]);
+                }).fail( (jqXHR, textStatus) => {
+                    this.deleteNodeInfoByUri({uri:uri, owner:owner});
+                    resolve(null);
+                });
+            });
+            return promise;
+        } else {
+            return index.uriIndex[indexKey];
+        }
+    }
+
+    getNodeInfoById ({id, owner}={}) {
         if (owner == undefined) {
             return this._localIndex.idIndex[id];
         } else {
@@ -62,7 +125,7 @@ class UriStore {
         }
     }
 
-    deleteNodeInfoByUri (uri, owner) {
+    deleteNodeInfoByUri ({uri, owner}={}) {
         if (owner == undefined) {
             var uriIndex = this._localIndex.uriIndex;
             var idIndex = this._localIndex.idIndex;
@@ -110,7 +173,7 @@ class UriStore {
         }
     }
 
-    storeData (data, owner) {
+    storeData ({data, owner}={}) {
         if (data.hasOwnProperty('name') && data.hasOwnProperty('id')) {
             if (data.name == '') {
                 var uriKey='.';
@@ -122,7 +185,7 @@ class UriStore {
                 var idIndex = this._localIndex.idIndex;
             } else {
                 if (!this._remoteIndices.hasOwnProperty(owner)) {
-                    this._remoteIndices[owner]={'uriIndex':{},'idIndex':{}};
+                    this._remoteIndices[owner]={uriIndex:{},idIndex:{}};
                 }
                 var uriIndex = this._remoteIndices[owner].uriIndex;
                 var idIndex = this._remoteIndices[owner].idIndex;
@@ -135,320 +198,94 @@ class UriStore {
                     idIndex[data.id].children.push(data.children[i].id);
                 }
                 for (var i=0;i<data.children.length;i++) {
-                    this.storeData(data.children[i], owner);
+                    this.storeData({data:data.children[i], owner:owner});
                 }
             }
         }
     }
+
+    storeSharedUris (data) {
+        var result = {};
+        var actualUsers = Object.keys(this._sharedUrisWithMe).sort((a,b) => a-b);
+        var newUsers = Object.keys(data).sort((a,b) => a-b);
+        var addedSome = newUsers.some( user => actualUsers.indexOf(user) < 0);
+        if (addedSome) {
+            result.modified = true;
+        }
+        if (!result.modified) {
+            var removedSome = actualUsers.some( user => newUsers.indexOf(user) < 0);
+            if (removedSome) {
+                result.modified = true;
+            }
+        }
+        if (!result.modified) {
+            var addedSomeUri = newUsers.some ( user => {
+                return data[user].some( uri => this._sharedUrisWithMe[user].indexOf(uri) < 0);
+            });
+            if (addedSomeUri) {
+                result.modified = true;
+            }
+        }
+        if (!result.modified) {
+            var removedSomeUri = newUsers.some ( user => {
+                return this._sharedUrisWithMe[user].some ( uri => data[user].indexOf(uri) < 0);
+            });
+            if (removedSomeUri) {
+                result.modified = true;
+            }
+        }
+        this._sharedUrisWithMe = data;
+        return result;
+    }
+
 }
 
 let uriStore = new UriStore();
 
+function getNodeInfoByUri(uri,owner) {
+    return uriStore.getNodeInfoByUri({uri:uri, owner:owner});
+}
+
+function getNodeInfoById(id,owner) {
+    return uriStore.getNodeInfoById({id:id, owner:owner});
+}
+
+
 function processMsgUriReq (data) {
-    var uri=data.uri;
-    var owner = data.owner;
-    requestUri(uri, owner);
+    uriStore.getNodeInfoByUri({uri:data.uri, owner:data.owner});
 }
-
-function requestUri (uri, owner) {
-    if (owner != undefined) {
-        var p_uri = owner+":"+uri;
-    } else {
-        var p_uri = uri;
-    }
-    var parameters={'uri':p_uri};
-    $.ajax({
-        url: '/var/uri/',
-        dataType: 'json',
-        data: parameters,
-    })
-    .done( data => {
-        uriStore.storeData(data, owner);
-        sendUriUpdate(uri, owner);
-    }).fail( (jqXHR, textStatus) => {
-        uriStore.deleteNodeInfoByUri(uri, owner);
-        sendUriUpdate(uri, owner);
-    });
-}
-
-function sendUriUpdate (uri, owner) {
-    if (owner != undefined) {
-        var msg = 'remoteUriUpdate'+'.'+owner;
-    } else {
-        var msg = 'localUriUpdate';
-    }
-    var data={'uri':uri};
-    PubSub.publish(msg,data);
-}
-
-function getUriGraph (rootUri, numVertices) {
-    return uriStore._data;
-}
-
 
 function processMsgUriActionReq (data) {
-    var node=uriStore.getNodeInfoById(data.id, data.owner);
-    if (node.hasOwnProperty('type')) {
-        if (node.type=='p') {
-            PubSub.publish('loadSlide',{pid:node.id});
-        } else if (node.type=='d') {
-            PubSub.publish('loadSlide',{did:node.id});
-        } else if (node.type=='w') {
-            PubSub.publish('loadSlide',{wid:node.id});
-        } else if (node.type=='v') {
-            PubSub.publish('uriReq',{uri:node.uri,owner:node.owner});
+    var info = uriStore.getNodeInfoById({id:data.id, owner:data.owner});
+    if (info.hasOwnProperty('type')) {
+        switch (info.type) {
+            case nodes.DATAPOINT:
+                PubSub.publish(topics.LOAD_SLIDE,{pid:info.id});
+                break;
+            case nodes.DATASOURCE:
+                PubSub.publish(topics.LOAD_SLIDE,{did:info.id});
+                break;
+            case nodes.WIDGET:
+                PubSub.publish(topics.LOAD_SLIDE,{wid:info.id});
+                break;
+            case nodes.VOID:
+                PubSub.publish(topics.URI_REQUEST,{uri:info.uri,owner:info.owner});
+                break;
+            default:
+                console.log('Invalid node type');
         }
     }
 }
 
 function processMsgSharedUrisWithMeReq (data) {
-    requestSharedUrisWithMe();
-}
-
-function requestSharedUrisWithMe () {
-    $.ajax({
-        url: '/var/uri/sharedwithme',
-        dataType: 'json',
-    })
-    .done( data => {
-        uriStore.setSharedUris(data);
-        sendSharedUrisWithMeUpdate();
-    });
-}
-
-function sendSharedUrisWithMeUpdate () {
-    var msg = 'sharedUrisWithMeUpdate';
-    var data={};
-    PubSub.publish(msg,data);
+    uriStore.getSharedUrisWithMe();
 }
 
 function getSharedUrisWithMe () {
-    return uriStore.getSharedUris();
+    return uriStore.getSharedUrisWithMe();
 }
 
 export {
-    uriStore,
+    getNodeInfoByUri,
     getSharedUrisWithMe
 }
-
-/*
-function UriStore () {
-    this._localIndex={uriIndex:{},idIndex:{}}
-    this._remoteIndices={}
-    this._sharedUrisWithMe={}
-    this.subscriptionTokens = [];
-    this.subscriptionTokens.push({token:PubSub.subscribe('uriReq', this.subscriptionHandler.bind(this)),msg:'UriReq'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('uriActionReq', this.subscriptionHandler.bind(this)),msg:'UriActionReq'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('sharedUrisWithMeReq', this.subscriptionHandler.bind(this)),msg:'SharedUrisWithMeReq'});
-}
-
-uriStore.prototype = {
-    subscriptionHandler: function (msg, data) {
-        switch (msg) {
-            case 'uriReq':
-                processMsgUriReq(data)
-                break;
-            case 'uriActionReq':
-                processMsgUriActionReq(data)
-                break;
-            case 'sharedUrisWithMeReq':
-                processMsgSharedUrisWithMeReq(data)
-                break;
-        }
-    },
-    getSharedUris: function () {
-        return this._sharedUrisWithMe;
-    },
-    setSharedUris: function (data) {
-        return this._sharedUrisWithMe=data;
-    },
-    getNodeInfoByUri: function (uri, owner) {
-        if (owner == undefined) {
-            if (uri == '') {
-                return this._localIndex.uriIndex['.']
-            } else {
-                return this._localIndex.uriIndex[uri]
-            }
-        } else {
-            if (this._remoteIndices.hasOwnProperty(owner)) {
-                return this._remoteIndices[owner].uriIndex[uri]
-            } else {
-                return null
-            }
-        }
-    },
-    getNodeInfoById: function (id, owner) {
-        if (owner == undefined) {
-            return this._localIndex.idIndex[id]
-        } else {
-            if (this._remoteIndices.hasOwnProperty(owner)) {
-                return this._remoteIndices[owner].idIndex[id]
-            } else {
-                return null
-            }
-        }
-    },
-    deleteNodeInfoByUri: function (uri, owner) {
-        if (owner == undefined) {
-            var uriIndex = this._localIndex.uriIndex;
-            var idIndex = this._localIndex.idIndex;
-            if (uri == '') {
-                var uriKey = '.';
-                var parentKey = null
-            } else {
-                var uriKey = uri;
-                var split = uri.split('.');
-                var parentKey = split.slice(0,split.length-1).join('.')
-                if (parentKey == '') {
-                    parentKey = '.';
-                }
-            }
-        } else {
-            if (this._remoteIndices.hasOwnProperty(owner)) {
-                var uriIndex = this._remoteIndices[owner].uriIndex;
-                var idIndex = this._remoteIndices[owner].idIndex;
-                var uriKey = uri
-                var split = uri.split('.');
-                var parentKey = split.slice(0,split.length-1).join('.')
-                if (parentKey == '') {
-                    parentKey = '.';
-                }
-            } else {
-                var uriIndex = null;
-            }
-        }
-        if (uriIndex != null) {
-            if (uriIndex.hasOwnProperty(uriKey)) {
-                var info = uriIndex[uriKey];
-                if (info.hasOwnProperty('id') && idIndex.hasOwnProperty(info.id)) {
-                    delete idIndex[info.id];
-                }
-                delete uriIndex[uriKey];
-            }
-            if (parentKey != null && uriIndex.hasOwnProperty(parentKey)) {
-                var parentInfo = uriIndex[parentKey];
-                var parentWithoutNode = uriIndex[parentKey].children.filter(function(value) { return value != uri });
-                uriIndex[parentKey].children = parentWithoutNode;
-                if (parentInfo.hasOwnProperty('id') && idIndex.hasOwnProperty(parentInfo.id)) {
-                    idIndex[parentInfo.id].children = parentWithoutNode;
-                }
-            }
-        }
-    },
-    storeData: function (data, owner) {
-        if (data.hasOwnProperty('name') && data.hasOwnProperty('id')) {
-            if (data.name == '') {
-                var uriKey='.';
-            } else {
-                var uriKey = data.name
-            }
-            if (owner == undefined) {
-                var uriIndex = this._localIndex.uriIndex
-                var idIndex = this._localIndex.idIndex
-            } else {
-                if (!this._remoteIndices.hasOwnProperty(owner)) {
-                    this._remoteIndices[owner]={'uriIndex':{},'idIndex':{}}
-                }
-                var uriIndex = this._remoteIndices[owner].uriIndex
-                var idIndex = this._remoteIndices[owner].idIndex
-            }
-            uriIndex[uriKey]={uri:data.name,type:data.type,id:data.id,children:[]}
-            idIndex[data.id]={uri:data.name,type:data.type,id:data.id,children:[]}
-            if (data.hasOwnProperty('children')) {
-                for (var i=0;i<data.children.length;i++) {
-                    uriIndex[uriKey].children.push(data.children[i].name)
-                    idIndex[data.id].children.push(data.children[i].id)
-                }
-                for (var i=0;i<data.children.length;i++) {
-                    this.storeData(data.children[i], owner)
-                }
-            }
-        }
-    }
-};
-
-var uriStore = new UriStore();
-
-function processMsgUriReq (data) {
-    uri=data.uri
-    owner = data.owner
-    requestUri(uri, owner)
-}
-
-function requestUri (uri, owner) {
-    if (owner != undefined) {
-        var p_uri = owner+":"+uri
-    } else {
-        var p_uri = uri
-    }
-    parameters={'uri':p_uri}
-    $.ajax({
-        url: '/var/uri/',
-        dataType: 'json',
-        data: parameters,
-    })
-    .done(function (data) {
-        uriStore.storeData(data, owner)
-        sendUriUpdate(uri, owner)
-    }).fail(function (jqXHR, textStatus) {
-        uriStore.deleteNodeInfoByUri(uri, owner)
-        sendUriUpdate(uri, owner)
-    });
-}
-
-function sendUriUpdate (uri, owner) {
-    if (owner != undefined) {
-        msg = 'remoteUriUpdate'+'.'+owner
-    } else {
-        msg = 'localUriUpdate'
-    }
-    data={'uri':uri}
-    PubSub.publish(msg,data)
-}
-
-function getUriGraph (rootUri, numVertices) {
-    return uriStore._data
-}
-
-
-function processMsgUriActionReq (data) {
-    node=uriStore.getNodeInfoById(data.id, data.owner)
-    if (node.hasOwnProperty('type')) {
-        if (node.type=='p') {
-            PubSub.publish('loadSlide',{pid:node.id})
-        } else if (node.type=='d') {
-            PubSub.publish('loadSlide',{did:node.id})
-        } else if (node.type=='w') {
-            PubSub.publish('loadSlide',{wid:node.id})
-        } else if (node.type=='v') {
-            PubSub.publish('uriReq',{uri:node.uri,owner:node.owner})
-        }
-    }
-}
-
-function processMsgSharedUrisWithMeReq (data) {
-    requestSharedUrisWithMe();
-}
-
-function requestSharedUrisWithMe () {
-    $.ajax({
-        url: '/var/uri/sharedwithme',
-        dataType: 'json',
-    })
-    .done(function (data) {
-        uriStore.setSharedUris(data)
-        sendSharedUrisWithMeUpdate()
-    });
-}
-
-function sendSharedUrisWithMeUpdate () {
-    msg = 'sharedUrisWithMeUpdate'
-    data={}
-    PubSub.publish(msg,data)
-}
-
-function getSharedUrisWithMe () {
-    return uriStore.getSharedUris();
-}
-
-*/

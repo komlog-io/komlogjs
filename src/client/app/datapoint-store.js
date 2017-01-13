@@ -1,132 +1,313 @@
 import * as d3 from 'd3';
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
+import {topics} from './types.js';
 
 class DatapointStore {
     constructor () {
+        this.minConfigRequestIntervalms = 300000;
+        this.minDataRequestIntervalms = 30000;
+        this.minSnapshotRequestIntervalms = 300000;
+        this.activeLoop = true;
+
         this._datapointData = {};
         this._datapointConfig = {};
+
         this.subscriptionTokens = [];
-        this.registeredRequests = [];
-        this.activeLoop = true;
-        this.subscriptionTokens.push({token:PubSub.subscribe('datapointDataReq', this.subscriptionHandler.bind(this)),msg:'datapointDataReq'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('datapointConfigReq', this.subscriptionHandler.bind(this)),msg:'datapointConfigReq'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('monitorDatapoint', this.subscriptionHandler.bind(this)),msg:'monitorDatapoint'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('markPositiveVar', this.subscriptionHandler.bind(this)),msg:'markPositiveVar'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('loadDatapointSlide', this.subscriptionHandler.bind(this)),msg:'loadDatapointSlide'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('deleteDatapoint', this.subscriptionHandler.bind(this)),msg:'deleteDatapoint'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('modifyDatapoint', this.subscriptionHandler.bind(this)),msg:'modifyDatapoint'});
+        this._registeredRequests = [];
+
+        this._lastConfigUpdate = {};
+
+
+        var subscribedTopics = [
+            topics.DATAPOINT_DATA_REQUEST,
+            topics.DATAPOINT_CONFIG_REQUEST,
+            topics.LOAD_DATAPOINT_SLIDE,
+            topics.DELETE_DATAPOINT,
+            topics.MONITOR_DATAPOINT,
+            topics.MARK_POSITIVE_VAR,
+            topics.MODIFY_DATAPOINT
+        ];
+
+        subscribedTopics.forEach( topic => {
+            this.subscriptionTokens.push({
+                token:PubSub.subscribe(topic,this.subscriptionHandler.bind(this)),
+                msg:topic
+            });
+        });
+
     }
 
 
     subscriptionHandler (msg, data) {
         switch (msg) {
-            case 'datapointDataReq':
-                processMsgDatapointDataReq(data);
+            case topics.DATAPOINT_DATA_REQUEST:
+                processMsgDatapointDataRequest(data);
                 break;
-            case 'datapointConfigReq':
-                processMsgDatapointConfigReq(data);
+            case topics.DATAPOINT_CONFIG_REQUEST:
+                processMsgDatapointConfigRequest(data);
                 break;
-            case 'monitorDatapoint':
+            case topics.MONITOR_DATAPOINT:
                 processMsgMonitorDatapoint(data);
                 break;
-            case 'markPositiveVar':
+            case topics.MARK_POSITIVE_VAR:
                 processMsgMarkPositiveVar(data);
                 break;
-            case 'loadDatapointSlide':
+            case topics.LOAD_DATAPOINT_SLIDE:
                 processMsgLoadDatapointSlide(data);
                 break;
-            case 'deleteDatapoint':
+            case topics.DELETE_DATAPOINT:
                 processMsgDeleteDatapoint(data);
                 break;
-            case 'modifyDatapoint':
+            case topics.MODIFY_DATAPOINT:
                 processMsgModifyDatapoint(data);
                 break;
         }
     }
 
+    updateLastConfigUpdate (pid) {
+        var now=new Date().getTime();
+        this._lastConfigUpdate[pid] = now;
+    }
+
+    getLastConfigUpdate (pid) {
+        if (this._lastConfigUpdate.hasOwnProperty(pid)) {
+            return this._lastConfigUpdate[pid];
+        } else {
+            return 0;
+        }
+    }
+
+    getConfig ({pid, force} = {}) {
+        var now=new Date().getTime();
+        var elapsed = now - this.getLastConfigUpdate(pid);
+        if ( force == true || elapsed > this.minConfigRequestIntervalms) {
+            var config;
+            var promise = new Promise( (resolve, reject) => {
+                $.ajax({
+                    url: '/etc/dp/'+pid,
+                    dataType: 'json',
+                })
+                .done( data => {
+                    var result = this.storeConfig(pid, data);
+                    this.updateLastConfigUpdate(pid);
+                    if (result.modified == true) {
+                        var topic = topics.DATAPOINT_CONFIG_UPDATE(pid);
+                        PubSub.publish(topic,pid);
+                    }
+                    config = data;
+                    resolve(config);
+                });
+            });
+            return promise;
+        } else {
+            var config = this._datapointConfig[pid];
+            return Promise.resolve(config);
+        }
+    }
+
+    getData (pid, interval, tid) {
+        var responseData;
+        var requestInterval = (subinterval) => {
+            console.log('requestInterval',subinterval);
+            var parameters = {};
+            if (subinterval) {
+                parameters.its=subinterval.its;
+                parameters.ets=subinterval.ets;
+            }
+            if (tid) {
+                parameters.t = tid;
+            }
+            return $.ajax({
+                url: '/var/dp/'+pid,
+                dataType: 'json',
+                data: parameters,
+            })
+            .done(response => {
+                console.log('requestInterval response',subinterval);
+                if (response.length > 0) {
+                    var receivedTs=response.map(e => e.ts);
+                    var receivedInterval={
+                        ets:Math.max.apply(null, receivedTs),
+                        its:Math.min.apply(null, receivedTs)
+                    }
+                    if (response.length == 300 && subinterval) {
+                        var newInterval = {
+                            its:subinterval.its,
+                            ets:receivedInterval.its
+                        }
+                        requestInterval(newInterval);
+                    }
+                    console.log('requestInterval almacenamos datos',subinterval);
+                    var result = this.storeData(pid, tid, response);
+                    if (result.modified) {
+                        console.log('requestInterval notificamos',subinterval);
+                        var topic = topics.DATAPOINT_DATA_UPDATE(pid);
+                        PubSub.publish(topic, {interval:receivedInterval});
+                    }
+                }
+            })
+            .fail( data => {console.log('no data for interval',subinterval,data);});
+        }
+        console.log('vamos a obtener datos',pid,interval,tid);
+        var intervals = [interval];
+        if (intervals.length > 0) {
+            return new Promise ( (resolve, reject) => {
+                var requests = intervals.map( i => requestInterval(i));
+                Promise.all(requests).then( values => {
+                    console.log('Requests resueltas',values);
+                    console.log('Requests resueltas llamo a getIntervalData');
+                    responseData = this._getIntervalData(pid,interval);
+                    resolve ({pid:pid,data:responseData});
+                })
+                .catch( values => {
+                    console.log('(catch) Requests resueltas llamo a getIntervalData');
+                    responseData = this._getIntervalData(pid,interval);
+                    resolve ({pid:pid,data:responseData});
+                });
+            });
+        } else {
+            console.log('(length 0) llamo a getIntervalData');
+            responseData = this._getIntervalData(pid,interval);
+            return Promise.resolve({pid:pid,data:responseData});
+        }
+    }
+
+    _getIntervalData (pid, interval) {
+        console.log('_getIntervalData',pid,interval);
+        var data = [];
+        if (this._datapointData.hasOwnProperty(pid)) {
+            console.log('_getIntervalData',this._datapointData[pid]);
+            Object.keys(this._datapointData[pid]).forEach( key => {
+                if (!interval || (interval.its <= key && key <= interval.ets)) {
+                    data.push({ts:key,value:this._datapointData[pid][key]});
+                }
+            });
+        }
+        if (!interval) {
+            data.sort( (a,b) => a.ts - b.ts);
+            return data.slice(Math.max(data.length - 200, 0));
+        } else {
+            return data;
+        }
+    }
+
     shouldRequest (request) {
-        var now = new Date();
-        if (typeof request.lastRequest === "undefined"){
+        var now = new Date().getTime();
+        if (request.nextRequest < now ) {
             return true;
         } else {
-            var nextRequest=new Date(request.lastRequest.getTime()+request.interval);
-            if (nextRequest < now ) {
-                return true;
-            } else {
-                return false;
-            }
+            return false;
         }
     }
 
     requestLoop () {
-        var now=new Date().getTime()/1000;
-        for (var i=0, j=this.registeredRequests.length; i<j; i++) {
-            var request=this.registeredRequests[i];
+        for (var i=0, j=this._registeredRequests.length; i<j;i++) {
+            var request=this._registeredRequests[i]
             if (this.shouldRequest(request)) {
                 switch (request.requestType) {
                     case 'requestDatapointData':
-                        var datapointTsArray=Object.keys(this._datapointData[request.pid]);
-                        if (datapointTsArray.length > 0) {
-                            var maxDatapointTs=Math.max.apply(null, datapointTsArray);
-                        } else {
-                            var maxDatapointTs=now-3600;
-                        }
-                        var interval={its:maxDatapointTs,ets:now};
-                        requestDatapointData(request.pid, interval)
+                        this.getData(request.pid);
                         break;
                 }
             }
         }
-        if (this.activeLoop === true ) {
-            setTimeout(this.requestLoop.bind(this),15000)
+        if (this.activeLoop) {
+            setTimeout(this.requestLoop.bind(this),15000);
         }
     }
 
-    addLoopRequest (id,type,interval) {
-        var reqArray=this.registeredRequests.filter(el => {return (el.pid == id && el.requestType == type)});
-        if (reqArray.length == 0) {
-            if (type == 'requestDatapointData') {
-                this.registeredRequests.push({requestType:type,pid:id,interval:interval,intervalsRequested:[]});
-            } else {
-                this.registeredRequests.push({requestType:type,pid:id,interval:interval});
+    addRegisteredRequest (id,type,interval) {
+        var exists = this._registeredRequests.some(el => el.pid == id && el.requestType == type);
+        if (!exists) {
+            var now = new Date().getTime();
+            var request = {
+                requestType:type,
+                pid:id,
+                interval:interval,
+                nextRequest:now + interval
             }
+            if (type == 'requestDatapointData') {
+                request.intervalsRequested=[];
+            }
+            this._registeredRequests.push(request);
         }
     }
 
-    deleteLoopRequest (id,type) {
-        this.registeredRequests=this.registeredRequests.filter(el => { return !(el.pid == id && el.requestType==type) });
+    deleteRegisteredRequest (id,type) {
+        var newRequests = this._registeredRequests.filter(el => !(el.pid == id && el.requestType == type));
+        this._registeredRequests = newRequests;
     }
 
     slowDownRequest (id, type) {
-        var reqArray=this.registeredRequests.filter(el => {return (el.pid == id && el.requestType == type)});
+        var reqArray=this._registeredRequests.filter(el => el.pid == id && el.requestType == type );
         if (reqArray.length == 1 && reqArray[0].interval<1800000) {
-            reqArray[0].interval=parseInt(reqArray[0].interval*1.2);
-            reqArray[0].lastRequest=new Date();
+            var now = new Date().getTime();
+            var interval = parseInt(reqArray[0].interval*1.2);
+            reqArray[0].interval=interval;
+            reqArray[0].nextRequest=now + interval;
         }
     }
 
     speedUpRequest (id, type) {
-        var reqArray=this.registeredRequests.filter(el => {return el.pid == id && el.requestType == type});
+        var reqArray=this._registeredRequests.filter( el => el.pid == id && el.requestType == type );
         if (reqArray.length == 1 && reqArray[0].interval>300000) {
-            reqArray[0].interval=parseInt(reqArray[0].interval*0.8);
-            reqArray[0].lastRequest=new Date();
+            var now = new Date().getTime();
+            var interval = parseInt(reqArray[0].interval*0.8);
+            reqArray[0].interval=interval;
+            reqArray[0].lastRequest=now + interval;
         }
     }
 
-    storeDatapointData (pid, data) {
-        if (!this._datapointData.hasOwnProperty(pid)) {
+    storeConfig (pid, data) {
+        var result = {};
+        if (!this._datapointConfig.hasOwnProperty(pid)) {
+            this._datapointConfig[pid]=data;
+            result.modified = true;
+        }
+        else {
+            var differs = Object.keys(data).some( key => {
+                return !(this._datapointConfig[pid].hasOwnProperty(key) && this._datapointConfig[pid][key]==data[key]);
+            });
+            if (differs) {
+                this._datapointConfig[pid]=data;
+                result.modified = true;
+            }
+        }
+        return result;
+    }
+
+    storeData (pid, tid, data) {
+        var result = {};
+        if (this._datapointData.hasOwnProperty(pid)) {
+            Object.keys(data).forEach( key => {
+                if (!this._datapointData[pid].hasOwnProperty(data[key].ts) &&
+                    this._datapointData[pid][data[key].ts] != data[key].value) {
+                    this._datapointData[pid][data[key].ts]=data[key].value;
+                    result.modified = true;
+                }
+            });
+        } else {
+            if (!tid) {
+                this.addRegisteredRequest(pid,'requestDatapointData',60000);
+            }
             this._datapointData[pid]={};
+            Object.keys(data).forEach( key => {
+                this._datapointData[pid][data[key].ts]=data[key].value;
+            });
+            result.modified = true;
         }
-        Object.keys(data).forEach( key => {
-            this._datapointData[pid][data[key].ts]=data[key].value;
-        });
+        if (result.modified) {
+            this.speedUpRequest(pid,'requestDatapointData');
+        } else {
+            this.slowDownRequest(pid,'requestDatapointData');
+        }
+        return result;
     }
 
-    updateIntervalsRequested (pid, interval) {
-        var reqArray=this.registeredRequests.filter( el => el.pid == pid && el.requestType == 'requestDatapointData');
+    _updateIntervalsRequested (pid, interval) {
+        var reqArray=this._registeredRequests.filter( el => el.pid == pid && el.requestType == 'requestDatapointData');
         if (reqArray.length==1) {
-            this.speedUpRequest(pid,'requestDatapointData');
             reqArray[0].lastRequest=new Date();
             reqArray[0].intervalsRequested.push($.extend({},interval));
             var intervals=reqArray[0].intervalsRequested;
@@ -169,226 +350,39 @@ class DatapointStore {
         }
     }
 
-    storeDatapointConfig (pid, data) {
-        var doStore=false;
-        if (!this._datapointConfig.hasOwnProperty(pid)) {
-            this._datapointConfig[pid]={}
-            Object.keys(data).forEach(key => {
-                this._datapointConfig[pid][key]=data[key];
-            });
-            doStore=true;
-        }
-        else {
-            Object.keys(data).forEach( key => {
-                if (!(this._datapointConfig[pid].hasOwnProperty(key) && this._datapointConfig[pid][key]==data[key])) {
-                    doStore=true;
-                }
-            });
-            if (doStore) {
-                this._datapointConfig[pid]=data;
-            }
-        }
-        return doStore;
-    }
 }
 
 
 let datapointStore = new DatapointStore();
 datapointStore.requestLoop();
 
-function processMsgDatapointDataReq (data) {
-    if (data.hasOwnProperty('pid')) {
-        if (!data.hasOwnProperty('tid')) {
-            datapointStore.addLoopRequest(data.pid,'requestDatapointData',60000);
-        }
-        requestDatapointData(data.pid, data.interval, undefined, data.tid);
+function getDatapointConfig (pid) {
+    return datapointStore.getConfig({pid:pid});
+}
+
+
+function processMsgDatapointConfigRequest (msgData) {
+    if (msgData.pid) {
+        datapointStore.getConfig({pid:msgData.pid, force:msgData.force});
     }
 }
 
-function requestDatapointData (pid, interval, originalInterval, tid) {
-    var doRequest = false;
-    var parameters = {};
-    if (tid && interval) {
-        doRequest=true;
-        parameters=getMissingSubInterval(pid, interval);
-        parameters.t=tid
+function getDatapointData (pid, interval, tid) {
+    return datapointStore.getData(pid, interval, tid);
+}
+
+function processMsgDatapointDataRequest (msgData) {
+    if (msgData.hasOwnProperty('pid')) {
+        datapointStore.getData(msgData.pid, msgData.interval, msgData.tid);
     }
-    else if (!interval) {
-        doRequest=true;
-    } else {
-        parameters=getMissingSubInterval(pid, interval);
-        if (parameters.hasOwnProperty('its')) {
-            doRequest=true;
-        }
-    }
-    if (doRequest == false) {
-        if (!originalInterval) {
-            sendDatapointDataUpdate(pid, interval);
-        } else {
-            sendDatapointDataUpdate(pid, originalInterval);
-        }
-    } else {
-        $.ajax({
-            url: '/var/dp/'+pid,
-            dataType: 'json',
-            data: parameters,
-        })
-        .done(response => {
-            datapointStore.storeDatapointData(pid,response);
-            var receivedTs=response.map(e => e.ts);
-            if (receivedTs.length>0) {
-                var maxTs=Math.max.apply(null, receivedTs);
-                var minTs=Math.min.apply(null, receivedTs);
-                var notifInterval={its:minTs, ets:maxTs};
-            }
-            if (0 < response.length && response.length < 300) {
-                if (originalInterval) {
-                    datapointStore.updateIntervalsRequested(pid,interval);
-                    sendDatapointDataUpdate(pid,originalInterval);
-                } else if (interval) {
-                    datapointStore.updateIntervalsRequested(pid,interval);
-                    sendDatapointDataUpdate(pid,interval);
-                } else {
-                    datapointStore.updateIntervalsRequested(pid,notifInterval);
-                    sendDatapointDataUpdate(pid,notifInterval);
-                }
-            } else if (response.length == 300) {
-                if (!interval && !originalInterval) {
-                    datapointStore.updateIntervalsRequested(pid,notifInterval);
-                    sendDatapointDataUpdate(pid,notifInterval);
-                } else if (interval && !originalInterval) {
-                    datapointStore.updateIntervalsRequested(pid,{its:notifInterval.its,ets:interval.ets});
-                    var newInterval={its:interval.its,ets:notifInterval.its};
-                    requestDatapointData(pid, newInterval, interval, tid);
-                } else if (interval && originalInterval) {
-                    datapointStore.updateIntervalsRequested(pid,{its:notifInterval.its,ets:interval.ets});
-                    var newInterval={its:interval.its,ets:notifInterval.its};
-                    requestDatapointData(pid, newInterval, originalInterval, tid);
-                }
-            }
+}
+
+function processMsgLoadDatapointSlide (msgData) {
+    if (msgData.hasOwnProperty('pid')) {
+        var config = datapointStore.getConfig({pid:msgData.pid});
+        config.then( data => {
+            PubSub.publish(topics.LOAD_SLIDE,{wid:data.wid});
         });
-    }
-}
-
-function getMissingSubInterval (pid, interval) {
-    var reqArray=datapointStore.registeredRequests.filter( el => {return el.pid == pid && el.requestType == 'requestDatapointData'});
-    if (reqArray.length==0) {
-        return interval;
-    }
-    var its=interval.its,
-        ets=interval.ets;
-    for (var i=0, j=reqArray[0].intervalsRequested.length; i<j; i++) {
-        if (interval.its <=reqArray[0].intervalsRequested[i].ets && interval.its >= reqArray[0].intervalsRequested[i].its) {
-            its=reqArray[0].intervalsRequested[i].ets;
-        }
-        if (interval.ets <=reqArray[0].intervalsRequested[i].ets && interval.ets >= reqArray[0].intervalsRequested[i].its) {
-            ets=reqArray[0].intervalsRequested[i].its;
-        }
-    }
-    if (its > ets) {
-        return {};
-    } else {
-        return {its:its,ets:ets};
-    }
-}
-
-function sendDatapointDataUpdate (pid, interval) {
-    if (datapointStore._datapointData.hasOwnProperty(pid)) {
-        PubSub.publish('datapointDataUpdate-'+pid,{interval:interval});
-    }
-}
-
-function getIntervalData (pid, interval) {
-    var intervalData=[];
-    if (datapointStore._datapointData.hasOwnProperty(pid)) {
-        Object.keys(datapointStore._datapointData[pid]).forEach( key => {
-            if (interval.its<= key && key <= interval.ets) {
-                intervalData.push({ts:key,value:datapointStore._datapointData[pid][key]});
-            }
-        });
-    }
-    intervalData.sort( (a,b) => a.ts - b.ts);
-    return intervalData;
-}
-
-function getDataSummary (data) {
-    var totalSamples=data.length;
-    if (totalSamples>0) {
-        var maxValue=Math.max.apply(Math,data.map(function(o){return o.value;}));
-        var minValue=Math.min.apply(Math,data.map(function(o){return o.value;}));
-        var sumValues=0;
-        var meanValue=0;
-        for (var j=0, k=data.length; j<k; j++) {
-            sumValues+=data[j].value;
-        }
-        if (totalSamples>0) {
-            meanValue=sumValues/totalSamples;
-        }
-        if ((maxValue % 1) != 0 || (minValue % 1) != 0) {
-            if (typeof maxValue % 1 == 'number' && maxValue % 1 != 0) {
-                var numDecimalsMaxValue=maxValue.toString().split('.')[1].length;
-            } else {
-                var numDecimalsMaxValue=2;
-            }
-            if (typeof minValue % 1 == 'number' && minValue % 1 != 0) {
-                var numDecimalsMinValue=minValue.toString().split('.')[1].length;
-            } else {
-                var numDecimalsMinValue=2;
-            }
-            var numDecimals=Math.max(numDecimalsMaxValue,numDecimalsMinValue);
-        } else {
-            var numDecimals=2;
-        }
-        meanValue=meanValue.toFixed(numDecimals)
-        var summary={'max':d3.format(",")(maxValue),'min':d3.format(",")(minValue),'mean':d3.format(",")(meanValue)};
-    } else {
-        var summary={'max':0,'min':0,'mean':0};
-    }
-    return summary;
-}
-
-function processMsgDatapointConfigReq (data) {
-    if (data.hasOwnProperty('pid')) {
-        requestDatapointConfig(data.pid);
-    }
-}
-
-function requestDatapointConfig (pid) {
-    $.ajax({
-        url: '/etc/dp/'+pid,
-        dataType: 'json',
-    })
-    .done(data => {
-        datapointStore.storeDatapointConfig(pid, data);
-        sendDatapointConfigUpdate(pid);
-    });
-}
-
-function sendDatapointConfigUpdate (pid) {
-    if (datapointStore._datapointConfig.hasOwnProperty(pid)) {
-        PubSub.publish('datapointConfigUpdate-'+pid,pid);
-    }
-}
-
-function processMsgLoadDatapointSlide (data) {
-    if (data.hasOwnProperty('pid')) {
-        var pid=data.pid;
-        if (datapointStore._datapointConfig.hasOwnProperty(pid)) {
-            if (datapointStore._datapointConfig[pid].hasOwnProperty('wid')) {
-                PubSub.publish('loadSlide',{wid:datapointStore._datapointConfig[pid].wid});
-            }
-        } else {
-            $.ajax({
-                url: '/etc/dp/'+pid,
-                dataType: 'json',
-            })
-            .done( responseData => {
-                datapointStore.storeDatapointConfig(pid, responseData);
-                if (responseData.hasOwnProperty('wid')) {
-                    PubSub.publish('loadSlide',{wid:responseData.wid});
-                }
-            });
-        }
     }
 }
 
@@ -402,13 +396,21 @@ function processMsgMonitorDatapoint (data) {
             data: JSON.stringify(requestData),
         })
         .done( responseData=> {
-            PubSub.publish('barMessage',{message:{type:'success', message:'New datapoint monitored'},messageTime:(new Date).getTime()});
-            setTimeout(PubSub.publish('datapointConfigReq',{pid:responseData.pid}),5000);
-            setTimeout(PubSub.publish('datasourceConfigReq',{did:requestData.did}),5000);
-            setTimeout(PubSub.publish('datasourceDataReq',{did:requestData.did}),5000);
+            var payload = {
+                message:{type:'success', message:'New datapoint monitored'},
+                messageTime:(new Date).getTime()
+            };
+            PubSub.publish(topics.BAR_MESSAGE,payload);
+            setTimeout(PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:responseData.pid, force:true}),5000);
+            setTimeout(PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,{did:requestData.did, force:true}),5000);
+            setTimeout(PubSub.publish(topics.DATASOURCE_DATA_REQUEST,{did:requestData.did, force:true}),5000);
         })
         .fail( responseData=> {
-            PubSub.publish('barMessage',{message:{type:'danger', message:'Error monitoring new datapoint. Code: '+responseData.responseJSON.error},messageTime:(new Date).getTime()});
+            var payload = {
+                message:{type:'danger', message:'Error monitoring new datapoint. Code: '+responseData.responseJSON.error},
+                messageTime:(new Date).getTime()
+            };
+            PubSub.publish(topics.BAR_MESSAGE,payload);
         });
     }
 }
@@ -423,13 +425,18 @@ function processMsgMarkPositiveVar (data) {
             data: JSON.stringify(requestData),
         })
         .done( responseData => {
-            setTimeout(PubSub.publish('datapointConfigReq',{pid:data.pid}),5000);
-            setTimeout(PubSub.publish('datapointDataReq',{pid:data.pid}),5000);
-            var datapointConfig = datapointStore._datapointConfig[data.pid];
-            if (datapointConfig.hasOwnProperty('did')) {
-                setTimeout(PubSub.publish('datasourceConfigReq',{did:datapointConfig.did}),5000);
-            }
-        })
+            setTimeout(PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:data.pid, force:true}),5000);
+            setTimeout(PubSub.publish(topics.DATAPOINT_DATA_REQUEST,{pid:data.pid}),5000);
+            var dpPromise = datapointStore.getConfig({pid:pid});
+            dpPromise.then( data => {
+                if (data.hasOwnProperty('did')) {
+                    setTimeout(PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,
+                    {did:datapointConfig.did, force:true}),5000);
+                    setTimeout(PubSub.publish(topics.DATASOURCE_DATA_REQUEST,
+                    {did:datapointConfig.did, force:true}),5000);
+                }
+            });
+        });
     }
 }
 
@@ -441,9 +448,13 @@ function processMsgDeleteDatapoint(msgData) {
                 type: 'DELETE',
             })
             .then( data => {
-                datapointStore.deleteLoopRequest(msgData.pid,'requestDatapointData');
+                datapointStore.deleteRegisteredRequest(msgData.pid,'requestDatapointData');
             }, data => {
-                PubSub.publish('barMessage',{message:{type:'danger', message:'Error deleting datapoint. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
+                var payload = {
+                    message:{type:'danger', message:'Error deleting datapoint. Code: '+data.responseJSON.error},
+                    messageTime:(new Date).getTime()
+                };
+                PubSub.publish(topics.BAR_MESSAGE,payload);
             });
     }
 }
@@ -457,489 +468,19 @@ function processMsgModifyDatapoint(msgData) {
             type: 'PUT',
             data: JSON.stringify(requestData),
         }).then( data => {
-            PubSub.publish('datapointConfigReq',{pid:msgData.pid});
+            PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:msgData.pid, force:true});
         }, data => {
-            PubSub.publish('barMessage',{message:{type:'danger', message:'Error updating datapoint. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
+            var payload = {
+                message:{type:'danger', message:'Error updating datapoint. Code: '+data.responseJSON.error},
+                messageTime:(new Date).getTime()
+            };
+            PubSub.publish(topics.BAR_MESSAGE, payload);
         });
     }
 }
 
 export {
-    datapointStore,
-    getIntervalData,
-    getDataSummary
+    getDatapointConfig,
+    getDatapointData,
 }
 
-
-/*
-function DatapointStore () {
-    this._datapointData = {};
-    this._datapointConfig = {};
-    this.subscriptionTokens = [];
-    this.registeredRequests = [];
-    this.activeLoop = true;
-
-    this.subscriptionTokens.push({token:PubSub.subscribe('datapointDataReq', this.subscriptionHandler.bind(this)),msg:'datapointDataReq'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('datapointConfigReq', this.subscriptionHandler.bind(this)),msg:'datapointConfigReq'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('monitorDatapoint', this.subscriptionHandler.bind(this)),msg:'monitorDatapoint'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('markPositiveVar', this.subscriptionHandler.bind(this)),msg:'markPositiveVar'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('loadDatapointSlide', this.subscriptionHandler.bind(this)),msg:'loadDatapointSlide'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('deleteDatapoint', this.subscriptionHandler.bind(this)),msg:'deleteDatapoint'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('modifyDatapoint', this.subscriptionHandler.bind(this)),msg:'modifyDatapoint'});
-
-}
-
-DatapointStore.prototype = {
-    subscriptionHandler: function (msg, data) {
-        switch (msg) {
-            case 'datapointDataReq':
-                processMsgDatapointDataReq(data)
-                break;
-            case 'datapointConfigReq':
-                processMsgDatapointConfigReq(data)
-                break;
-            case 'monitorDatapoint':
-                processMsgMonitorDatapoint(data)
-                break;
-            case 'markPositiveVar':
-                processMsgMarkPositiveVar(data)
-                break;
-            case 'loadDatapointSlide':
-                processMsgLoadDatapointSlide(data)
-                break;
-            case 'deleteDatapoint':
-                processMsgDeleteDatapoint(data)
-                break;
-            case 'modifyDatapoint':
-                processMsgModifyDatapoint(data)
-                break;
-        }
-    },
-    shouldRequest: function (request) {
-        var now = new Date();
-        if (typeof request.lastRequest === "undefined"){
-            return true;
-        } else {
-            nextRequest=new Date(request.lastRequest.getTime()+request.interval)
-            if (nextRequest < now ) {
-                return true;
-            } else {
-                return false;
-            }
-        }
-    },
-    requestLoop: function () {
-        now=new Date().getTime()/1000;
-        for (var i=0; i<this.registeredRequests.length;i++) {
-            request=this.registeredRequests[i]
-            if (this.shouldRequest(request)) {
-                switch (request.requestType) {
-                    case 'requestDatapointData':
-                        datapointTsArray=[]
-                        $.each(this._datapointData[request.pid], function (key, object) {
-                            datapointTsArray.push(key)
-                        });
-                        if (datapointTsArray.length > 0) {
-                            maxDatapointTs=Math.max.apply(null, datapointTsArray)
-                        } else {
-                            maxDatapointTs=now-3600
-                        }
-                        interval={its:maxDatapointTs,ets:now}
-                        requestDatapointData(request.pid, interval)
-                        break;
-                }
-            }
-        }
-        if (this.activeLoop === true ) {
-            setTimeout(this.requestLoop.bind(this),15000)
-        }
-    },
-    addLoopRequest: function (id,type,interval) {
-        reqArray=$.grep(this.registeredRequests, function (e) {return e.pid == id && e.requestType == type})
-        if (reqArray.length == 0) {
-            if (type == 'requestDatapointData') {
-                this.registeredRequests.push({requestType:type,pid:id,interval:interval,intervalsRequested:[]})
-            } else {
-                this.registeredRequests.push({requestType:type,pid:id,interval:interval})
-            }
-        }
-    },
-    deleteLoopRequest: function (id,type) {
-        this.registeredRequests=this.registeredRequests.filter(function (el) {
-            if (el.pid==id && el.requestType==type) {
-                return false
-            } else {
-                return true
-            }
-        });
-    },
-    slowDownRequest: function (id, type) {
-        reqArray=$.grep(this.registeredRequests, function (e) {return e.pid == id && e.requestType == type})
-        if (reqArray.length == 1 && reqArray[0].interval<1800000) {
-            reqArray[0].interval=parseInt(reqArray[0].interval*1.2)
-            reqArray[0].lastRequest=new Date();
-        }
-    },
-    speedUpRequest: function (id, type) {
-        reqArray=$.grep(this.registeredRequests, function (e) {return e.pid == id && e.requestType == type})
-        if (reqArray.length == 1 && reqArray[0].interval>300000) {
-            reqArray[0].interval=parseInt(reqArray[0].interval*0.8)
-            reqArray[0].lastRequest=new Date();
-        }
-    },
-    storeDatapointData: function (pid, data) {
-        if (!this._datapointData.hasOwnProperty(pid)) {
-            this._datapointData[pid]={}
-            $.each(data, function (index,object) {
-                this._datapointData[pid][object.ts]=object.value
-            }.bind(this));
-        }
-        else {
-            $.each(data, function (index,object) {
-                this._datapointData[pid][object.ts]=object.value
-            }.bind(this));
-        }
-    },
-    updateIntervalsRequested: function (pid, interval) {
-        reqArray=$.grep(this.registeredRequests, function (e) {return e.pid == pid && e.requestType == 'requestDatapointData'})
-        if (reqArray.length==1) {
-            this.speedUpRequest(pid,'requestDatapointData')
-            reqArray[0].lastRequest=new Date();
-            reqArray[0].intervalsRequested.push($.extend({},interval));
-            intervals=reqArray[0].intervalsRequested
-            for (var i=0;i<intervals.length;i++) {
-                for (var j=0;j<intervals.length;j++) {
-                    if (i!=j && intervals[i].ets == intervals[j].its) {
-                        intervals.push({its:intervals[i].its,ets:intervals[j].ets})
-                        if (j>i) {
-                            intervals.splice(j,1);
-                            intervals.splice(i,1);
-                        } else {
-                            intervals.splice(i,1);
-                            intervals.splice(j,1);
-                        }
-                        j--;
-                        i--;
-                    } else if (i!=j && intervals[i].its <= intervals[j].its && intervals[i].ets > intervals[j].its && intervals[i].ets <= intervals[j].ets) {
-                        intervals.push({its:intervals[i].its,ets:intervals[j].ets})
-                        if (j>i) {
-                            intervals.splice(j,1);
-                            intervals.splice(i,1);
-                        } else {
-                            intervals.splice(i,1);
-                            intervals.splice(j,1);
-                        }
-                        j--;
-                        i--;
-                    } else if (i!=j && intervals[i].its <= intervals[j].its && intervals[i].ets >= intervals[j].ets) {
-                        if (j>i) {
-                            intervals.splice(j,1);
-                            j--;
-                        } else {
-                            intervals.splice(i,1);
-                            i--;
-                        }
-                    }
-                }
-            }
-            reqArray[0].intervalsRequested=intervals
-        }
-    },
-    storeDatapointConfig: function (pid, data) {
-        doStore=false
-        if (!this._datapointConfig.hasOwnProperty(pid)) {
-            this._datapointConfig[pid]={}
-            $.each(data, function (key,value) {
-                this._datapointConfig[pid][key]=value
-            }.bind(this));
-            doStore=true
-        }
-        else {
-            $.each(data, function (key,value) {
-                if (!(this._datapointConfig[pid].hasOwnProperty(key) && this._datapointConfig[pid][key]==value)) {
-                    doStore=true
-                }
-            }.bind(this));
-            if (doStore) {
-                this._datapointConfig[pid]=data
-            }
-        }
-        return doStore;
-    },
-};
-
-var datapointStore = new DatapointStore();
-datapointStore.requestLoop()
-
-function processMsgDatapointDataReq (data) {
-    if (data.hasOwnProperty('pid')) {
-        if (!data.hasOwnProperty('tid')) {
-            datapointStore.addLoopRequest(data.pid,'requestDatapointData',60000)
-        }
-        requestDatapointData(data.pid, data.interval, undefined, data.tid)
-    }
-}
-
-function requestDatapointData (pid, interval, originalInterval, tid) {
-    if (tid && interval) {
-        doRequest=true
-        parameters=getMissingSubInterval(pid, interval)
-        parameters.t=tid
-    }
-    else if (!interval) {
-        doRequest=true
-        parameters={}
-    } else {
-        parameters=getMissingSubInterval(pid, interval)
-        if (parameters.hasOwnProperty('its')) {
-            doRequest=true
-        } else {
-            doRequest=false
-        }
-    }
-    if (doRequest == false) {
-        if (!originalInterval) {
-            sendDatapointDataUpdate(pid, interval)
-        } else {
-            sendDatapointDataUpdate(pid, originalInterval)
-        }
-    } else {
-        $.ajax({
-            url: '/var/dp/'+pid,
-            dataType: 'json',
-            data: parameters,
-        })
-        .done(function (response) {
-            datapointStore.storeDatapointData(pid,response)
-            receivedTs=$.map(response, function (e) {
-                return e.ts
-            });
-            if (receivedTs.length>0) {
-                maxTs=Math.max.apply(null, receivedTs)
-                minTs=Math.min.apply(null, receivedTs)
-                notifInterval={its:minTs, ets:maxTs}
-            }
-            if (0 < response.length && response.length < 300) {
-                if (originalInterval) {
-                    datapointStore.updateIntervalsRequested(pid,interval);
-                    sendDatapointDataUpdate(pid,originalInterval)
-                } else if (interval) {
-                    datapointStore.updateIntervalsRequested(pid,interval);
-                    sendDatapointDataUpdate(pid,interval)
-                } else {
-                    datapointStore.updateIntervalsRequested(pid,notifInterval);
-                    sendDatapointDataUpdate(pid,notifInterval)
-                }
-            } else if (response.length == 300) {
-                if (!interval && !originalInterval) {
-                    datapointStore.updateIntervalsRequested(pid,notifInterval)
-                    sendDatapointDataUpdate(pid,notifInterval)
-                } else if (interval && !originalInterval) {
-                    datapointStore.updateIntervalsRequested(pid,{its:notifInterval.its,ets:interval.ets});
-                    newInterval={its:interval.its,ets:notifInterval.its}
-                    requestDatapointData(pid, newInterval, interval, tid)
-                } else if (interval && originalInterval) {
-                    datapointStore.updateIntervalsRequested(pid,{its:notifInterval.its,ets:interval.ets});
-                    newInterval={its:interval.its,ets:notifInterval.its}
-                    requestDatapointData(pid, newInterval, originalInterval, tid)
-                }
-            }
-        })
-    }
-}
-
-function getMissingSubInterval (pid, interval) {
-    reqArray=$.grep(datapointStore.registeredRequests, function (e) {return e.pid == pid && e.requestType == 'requestDatapointData'})
-    if (reqArray.length==0) {
-        return interval
-    }
-    var its=interval.its
-    var ets=interval.ets
-    for (var i=0; i<reqArray[0].intervalsRequested.length; i++) {
-        if (interval.its <=reqArray[0].intervalsRequested[i].ets && interval.its >= reqArray[0].intervalsRequested[i].its) {
-            its=reqArray[0].intervalsRequested[i].ets
-        }
-        if (interval.ets <=reqArray[0].intervalsRequested[i].ets && interval.ets >= reqArray[0].intervalsRequested[i].its) {
-            ets=reqArray[0].intervalsRequested[i].its
-        }
-    }
-    if (its > ets) {
-        return {}
-    } else {
-        return {its:its,ets:ets}
-    }
-}
-
-function sendDatapointDataUpdate (pid, interval) {
-    if (datapointStore._datapointData.hasOwnProperty(pid)) {
-        PubSub.publish('datapointDataUpdate-'+pid,{interval:interval})
-    }
-}
-
-function getIntervalData (pid, interval) {
-    intervalData=[]
-    if (datapointStore._datapointData.hasOwnProperty(pid)) {
-        $.each(datapointStore._datapointData[pid], function (key,value) {
-            if (interval.its<= key && key <= interval.ets) {
-                intervalData.push({ts:key,value:value})
-            }
-        });
-    }
-    intervalData.sort(function (a,b) { return a.ts - b.ts });
-    return intervalData
-}
-
-function getDataSummary (data) {
-    totalSamples=data.length;
-    if (totalSamples>0) {
-        maxValue=Math.max.apply(Math,data.map(function(o){return o.value;}));
-        minValue=Math.min.apply(Math,data.map(function(o){return o.value;}));
-        sumValues=0;
-        meanValue=0;
-        for (var j=0;j<data.length;j++) {
-            sumValues+=data[j].value;
-        }
-        if (totalSamples>0) {
-            meanValue=sumValues/totalSamples;
-        }
-        if ((maxValue % 1) != 0 || (minValue % 1) != 0) {
-            if (typeof maxValue % 1 == 'number' && maxValue % 1 != 0) {
-                numDecimalsMaxValue=maxValue.toString().split('.')[1].length
-            } else {
-                numDecimalsMaxValue=2
-            }
-            if (typeof minValue % 1 == 'number' && minValue % 1 != 0) {
-                numDecimalsMinValue=minValue.toString().split('.')[1].length
-            } else {
-                numDecimalsMinValue=2
-            }
-            numDecimals=Math.max(numDecimalsMaxValue,numDecimalsMinValue)
-        } else {
-            numDecimals=2
-        }
-        meanValue=meanValue.toFixed(numDecimals)
-        summary={'max':d3.format(",")(maxValue),'min':d3.format(",")(minValue),'mean':d3.format(",")(meanValue)}
-    } else {
-        summary={'max':0,'min':0,'mean':0}
-    }
-    return summary
-}
-
-function processMsgDatapointConfigReq (data) {
-    if (data.hasOwnProperty('pid')) {
-        requestDatapointConfig(data.pid)
-    }
-}
-
-function requestDatapointConfig (pid) {
-    $.ajax({
-        url: '/etc/dp/'+pid,
-        dataType: 'json',
-    })
-    .done(function (data) {
-        datapointStore.storeDatapointConfig(pid, data);
-        sendDatapointConfigUpdate(pid);
-    })
-}
-
-function sendDatapointConfigUpdate (pid) {
-    if (datapointStore._datapointConfig.hasOwnProperty(pid)) {
-        PubSub.publish('datapointConfigUpdate-'+pid,pid)
-    }
-}
-
-function processMsgLoadDatapointSlide (data) {
-    if (data.hasOwnProperty('pid')) {
-        pid=data.pid
-        if (datapointStore._datapointConfig.hasOwnProperty(pid)) {
-            if (datapointStore._datapointConfig[pid].hasOwnProperty('wid')) {
-                PubSub.publish('loadSlide',{wid:datapointStore._datapointConfig[pid].wid})
-            }
-        } else {
-            $.ajax({
-                url: '/etc/dp/'+pid,
-                dataType: 'json',
-            })
-            .done(function (data) {
-                datapointStore.storeDatapointConfig(pid, data);
-                if (data.hasOwnProperty('wid')) {
-                    PubSub.publish('loadSlide',{wid:data.wid})
-                }
-            });
-        }
-    }
-}
-
-function processMsgMonitorDatapoint (data) {
-    if (data.hasOwnProperty('did') && data.hasOwnProperty('seq') && data.hasOwnProperty('p') && data.hasOwnProperty('l') && data.hasOwnProperty('datapointname')) {
-        requestData={did:data.did,seq:data.seq,p:data.p,l:data.l,datapointname:data.datapointname}
-        $.ajax({
-            url: '/etc/dp/',
-            dataType: 'json',
-            type: 'POST',
-            data: JSON.stringify(requestData),
-        })
-        .done(function (data) {
-            PubSub.publish('barMessage',{message:{type:'success', message:'New datapoint monitored'},messageTime:(new Date).getTime()})
-            setTimeout(PubSub.publish('datapointConfigReq',{pid:data.pid}),5000)
-            setTimeout(PubSub.publish('datasourceConfigReq',{did:requestData.did}),5000)
-            setTimeout(PubSub.publish('datasourceDataReq',{did:requestData.did}),5000)
-        })
-        .fail(function (data) {
-            PubSub.publish('barMessage',{message:{type:'danger', message:'Error monitoring new datapoint. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-        });
-    }
-}
-
-function processMsgMarkPositiveVar (data) {
-    if (data.hasOwnProperty('pid') && data.hasOwnProperty('seq') && data.hasOwnProperty('p') && data.hasOwnProperty('l')) {
-        requestData={seq:data.seq,p:data.p,l:data.l}
-        $.ajax({
-            url: '/etc/dp/'+data.pid+'/positives/',
-            dataType: 'json',
-            type: 'POST',
-            data: JSON.stringify(requestData),
-        })
-        .done(function (responseData) {
-            setTimeout(PubSub.publish('datapointConfigReq',{pid:data.pid}),5000)
-            setTimeout(PubSub.publish('datapointDataReq',{pid:data.pid}),5000)
-            var datapointConfig = datapointStore._datapointConfig[data.pid]
-            if (datapointConfig.hasOwnProperty('did')) {
-                setTimeout(PubSub.publish('datasourceConfigReq',{did:datapointConfig.did}),5000)
-            }
-        })
-    }
-}
-
-function processMsgDeleteDatapoint(msgData) {
-    if (msgData.hasOwnProperty('pid')) {
-        $.ajax({
-                url: '/etc/dp/'+msgData.pid,
-                dataType: 'json',
-                type: 'DELETE',
-            })
-            .then(function(data){
-                datapointStore.deleteLoopRequest(msgData.pid,'requestDatapointData')
-            }, function(data){
-                PubSub.publish('barMessage',{message:{type:'danger', message:'Error deleting datapoint. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-            });
-    }
-}
-
-function processMsgModifyDatapoint(msgData) {
-    if (msgData.hasOwnProperty('color')) {
-        requestData={color:msgData.color}
-        $.ajax({
-            url: '/etc/dp/'+msgData.pid,
-            dataType: 'json',
-            type: 'PUT',
-            data: JSON.stringify(requestData),
-        }).then(function(data){
-            PubSub.publish('datapointConfigReq',{pid:msgData.pid})
-        }, function(data){
-            PubSub.publish('barMessage',{message:{type:'danger', message:'Error updating datapoint. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-        });
-    }
-}
-
-*/

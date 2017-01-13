@@ -3,10 +3,11 @@ import PubSub from 'pubsub-js';
 import * as ReactBootstrap from 'react-bootstrap';
 import * as d3 from 'd3';
 import * as utils from './utils.js';
-import {snapshotStore} from './snapshot-store.js';
-import {datasourceStore} from './datasource-store.js';
-import {getDataSummary, getIntervalData} from './datapoint-store.js';
+import {getSnapshotConfig} from './snapshot-store.js';
+import {getDatasourceConfig, getDatasourceData, getDatasourceSnapshotData} from './datasource-store.js';
+import {getDataSummary, getDatapointData} from './datapoint-store.js';
 import {TimeSlider, ContentLinegraph, ContentHistogram} from './widget.jsx';
+import {topics, styles} from './types.js';
 
 
 class Snapshot extends React.Component {
@@ -21,19 +22,20 @@ class Snapshot extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens[props.nid] = [];
-        this.subscriptionTokens[props.nid].push({token:PubSub.subscribe('snapshotConfigUpdate-'+props.nid, this.subscriptionHandler),msg:'snapshotConfigUpdate-'+props.nid});
     }
 
-    subscriptionHandler = (msg,data) => {
-        switch (msg) {
-            case 'snapshotConfigUpdate-'+this.props.nid:
-                this.refreshConfig();
-                break;
-        }
+    async initialization () {
+        var conf = await getSnapshotConfig(this.props.nid, this.props.tid);
+
+        this.subscriptionTokens[this.props.nid].push({
+            token:PubSub.subscribe(topics.SNAPSHOT_CONFIG_UPDATE(this.props.nid), this.subscriptionHandler),
+            msg:topics.SNAPSHOT_CONFIG_UPDATE(this.props.nid)
+        });
+        this.setState({conf:conf});
     }
 
     componentDidMount () {
-        PubSub.publish('snapshotConfigReq',{nid:this.props.nid,tid:this.props.tid})
+        this.initialization();
     }
 
     componentWillUnmount () {
@@ -41,6 +43,14 @@ class Snapshot extends React.Component {
             PubSub.unsubscribe(d.token);
         });
         delete this.subscriptionTokens[this.props.nid];
+    }
+
+    subscriptionHandler = (msg,data) => {
+        switch (msg) {
+            case topics.SNAPSHOT_CONFIG_UPDATE(this.props.nid):
+                this.refreshConfig();
+                break;
+        }
     }
 
     shareCallback = () => {
@@ -59,18 +69,13 @@ class Snapshot extends React.Component {
         PubSub.publish('barMessage',{message:data.message,messageTime:data.messageTime});
     }
 
-    refreshConfig () {
-        if (snapshotStore._snapshotConfig.hasOwnProperty(this.props.nid)) {
-            var snapshotConfig=snapshotStore._snapshotConfig[this.props.nid];
-            var shouldUpdate=false;
-            Object.keys(snapshotConfig).forEach( key => {
-                if (!(this.state.conf.hasOwnProperty(key) && this.state.conf[key]==snapshotConfig[key])) {
-                    shouldUpdate=true;
-                }
-            });
-            if (shouldUpdate) {
-                this.setState({conf:snapshotConfig});
-            }
+    async refreshConfig () {
+        var newConfig = await getSnapshotConfig(this.props.nid, this.props.tid);
+        var shouldUpdate = Object.keys(newConfig).some( key => {
+            return !(this.state.conf.hasOwnProperty(key) && this.state.conf[key] == newConfig[key]);
+        });
+        if (shouldUpdate) {
+            this.setState({conf:newConfig});
         }
     }
 
@@ -107,7 +112,7 @@ class Snapshot extends React.Component {
               </div>
             );
         }
-        return snapshot
+        return snapshot;
     }
 }
 
@@ -162,8 +167,7 @@ class SnapshotBar extends React.Component {
 
 class SnapshotDs extends React.Component {
     state = {
-        dsData: null,
-        timestamp: null,
+        loading: true,
         downloadCounter:this.props.downloadCounter
     };
 
@@ -175,18 +179,13 @@ class SnapshotDs extends React.Component {
         this.subscriptionTokens[props.nid].push({token:PubSub.subscribe('snapshotDsDataUpdate-'+props.datasource.did, this.subscriptionHandler),msg:'snapshotDsDataUpdate-'+props.datasource.did});
     }
 
-    subscriptionHandler = (msg,data) => {
-        switch (msg) {
-            case 'snapshotDsDataUpdate-'+this.props.datasource.did:
-                if (data.hasOwnProperty('seq') && data.seq==this.props.seq) {
-                    this.refreshData();
-                }
-                break;
-        }
+    async initialization () {
+        var dsData = await getDatasourceSnapshotData (this.props.datasource.did, this.props.seq, this.props.tid);
+        this.setState({dsData:dsData,timestamp:dsData.ts,loading:false});
     }
 
     componentDidMount () {
-        PubSub.publish('snapshotDsDataReq',{did:this.props.datasource.did,tid:this.props.tid,seq:this.props.seq});
+        this.initialization();
     }
 
     componentWillUnmount () {
@@ -203,12 +202,23 @@ class SnapshotDs extends React.Component {
         }
     }
 
-    refreshData () {
-        if (datasourceStore._snapshotDsData.hasOwnProperty(this.props.datasource.did)) {
-            var datasourceData = datasourceStore._snapshotDsData[this.props.datasource.did];
-            if (!this.state.dsData && datasourceData.hasOwnProperty(this.props.seq)) {
-                this.setState({dsData:datasourceData[this.props.seq],timestamp:datasourceData[this.props.seq].ts});
-            }
+    subscriptionHandler = (msg,data) => {
+        switch (msg) {
+            case topics.SNAPSHOT_DS_DATA_UPDATE(this.props.datasource.did):
+                if (data.hasOwnProperty('seq') && data.seq==this.props.seq) {
+                    this.refreshData();
+                }
+                break;
+        }
+    }
+
+    async refreshData () {
+        var newData = await getDatasourceSnapshotData (this.props.datasource.did, this.props.seq, this.props.tid);
+        var shouldUpdate = Object.keys(newData).some ( key => {
+            return !(this.state.dsData.hasOwnProperty(key) && this.state.dsData[key] == newData[key]);
+        });
+        if (shouldUpdate) {
+            this.setState({dsData:newData,timestamp:newData.ts});
         }
     }
 
@@ -218,10 +228,10 @@ class SnapshotDs extends React.Component {
         }
     }
 
-    getDsInfo (timestamp) {
-        if (typeof timestamp === 'number') {
+    getDsInfo () {
+        if (this.state.timestamp) {
             var dateFormat = d3.timeFormat("%Y/%m/%d - %H:%M:%S");
-            var date = new Date(timestamp*1000);
+            var date = new Date(this.state.timestamp*1000);
             var dateText=dateFormat(date);
             return (
               <div className="ds-info">
@@ -233,7 +243,8 @@ class SnapshotDs extends React.Component {
         }
     }
 
-    generateHtmlContent (dsData) {
+    generateHtmlContent () {
+        var dsData = this.state.dsData;
         var elements=[];
         if (!dsData) {
             return elements;
@@ -307,7 +318,14 @@ class SnapshotDs extends React.Component {
     }
 
     render () {
-        var elements=this.generateHtmlContent(this.state.dsData);
+        if (this.state.loading) {
+            return (
+              <div style={styles.banner}>
+                Loading...
+              </div>
+            );
+        }
+        var elements=this.generateHtmlContent();
         var element_nodes=elements.map ( element => {
             if (element.type == 'text') {
                 return (
@@ -332,7 +350,7 @@ class SnapshotDs extends React.Component {
                 );
             }
         });
-        var info_node=this.getDsInfo(this.state.timestamp);
+        var info_node=this.getDsInfo();
         return (
           <div>
             {info_node}
@@ -346,9 +364,8 @@ class SnapshotDs extends React.Component {
 
 class SnapshotDp extends React.Component {
     state = {
+        loading: true,
         interval: {its:this.props.its,ets:this.props.ets},
-        data: [],
-        summary: {},
         downloadCounter:this.props.downloadCounter,
         activeVis: 0,
     };
@@ -358,11 +375,32 @@ class SnapshotDp extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens[props.nid]=[];
-        this.subscriptionTokens[props.nid].push({token:PubSub.subscribe('datapointDataUpdate-'+props.datapoint.pid, this.subscriptionHandler),msg:'datapointDataUpdate-'+props.datapoint.pid});
+    }
+
+    async initialization () {
+        var dpData = await getDatapointData(this.props.datapoint.pid, this.state.interval, this.props.tid);
+
+        var subscribedTopics = [
+            topics.DATAPOINT_DATA_UPDATE(this.props.datapoint.pid)
+        ];
+
+        subscribedTopics.forEach(topic => {
+            this.subscriptionTokens[this.props.nid].push({
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            });
+        });
+
+        var newState = {
+            data: dpData.data,
+            loading:false
+        }
+        this.setState(newState);
+
     }
 
     componentDidMount () {
-        PubSub.publish('datapointDataReq',{pid:this.props.datapoint.pid, interval:this.state.interval, tid:this.props.tid});
+        this.initialization();
     }
 
     componentWillUnmount () {
@@ -400,51 +438,71 @@ class SnapshotDp extends React.Component {
     }
 
     newIntervalCallback = (interval) => {
-        if (interval.hasOwnProperty('its') && interval.hasOwnProperty('ets')) {
-            if (interval.its<this.props.its) {
-                interval.its=this.props.its;
-            }
-            if (interval.ets>this.props.ets) {
-                interval.ets=this.props.ets;
-            }
-            if (interval.its == interval.ets) {
-                interval.its=interval.ets-3600;
-            }
-            PubSub.publish('datapointDataReq',{pid:this.props.datapoint.pid,interval:interval,tid:this.props.tid});
-            this.refreshData(interval);
+        if (interval.its == interval.ets) {
+            interval.its=interval.ets-3600;
         }
+        if (interval.its<this.props.its) {
+            interval.its=this.props.its;
+        }
+        if (interval.ets>this.props.ets) {
+            interval.ets=this.props.ets;
+        }
+        var newData = getDatapointData(this.props.datapoint.pid, interval, this.props.tid);
+        newData.then( dpData => this.setState({interval:interval, data:dpData.data}));
     }
 
     subscriptionHandler = (msg,data) => {
         switch (msg) {
-            case 'datapointDataUpdate-'+this.props.datapoint.pid:
-                if ((this.state.interval.its <= data.interval.its && data.interval.its <= this.state.interval.ets) ||
-                           (this.state.interval.its <= data.interval.ets && data.interval.ets <= this.state.interval.ets)) {
-                    this.refreshData(this.state.interval);
-                }
+            case topics.DATAPOINT_DATA_UPDATE(this.props.datapoint.pid):
+                this.refreshData(data.interval);
                 break;
         }
     }
 
-    refreshData (interval) {
-        var newData=getIntervalData(this.props.datapoint.pid, interval);
-        var newSummary=this.getDataSummary(newData);
-        this.setState({interval: interval, data: newData, summary:newSummary});
+    async refreshData (interval) {
+        var shouldUpdate = false;
+        if (interval.its >= this.props.its &&
+            interval.its >= this.state.interval.its &&
+            interval.ets <= this.props.ets &&
+            interval.ets <= this.state.interval.ets) {
+            var newData = await getIntervalData(this.props.datapoint.pid, interval, this.props.tid);
+            //for new or different samples
+            shouldUpdate = newData.data.some( d => {
+                var haveIt = this.state.data.some ( e => e.ts == d.ts && e.value == d.value);
+                return !haveIt;
+            });
+            //for deleted samples
+            if (!shouldUpdate) {
+                var intervalData = this.state.data.filter( d => d.ts >= interval.its && d.ts <= interval.ets);
+                if (intervalData.length != newData.data.length) {
+                    shouldUpdate = true;
+                }
+            }
+        }
+        if (shouldUpdate) {
+            var newInt;
+            var intervalLength = this.state.interval.ets - this.state.interval.its;
+            var newTs = newData.data.map(d => d.ts);
+            var ets = Math.max.apply(null, newTs);
+            if (ets > this.state.interval.ets) {
+                newInt = {ets:ets,its:ets-intervalLength};
+            } else {
+                newInt = this.state.interval;
+            }
+            newData = await getDatapointData(this.props.datapoint.pid, newInt, this.props.tid);
+            this.setState({data: newData.data, interval:newInterval});
+        }
     }
 
-    getDataSummary (data) {
+    getDataSummary () {
+        var data = this.state.data;
         var totalSamples=data.length;
         if (totalSamples>0) {
-            var maxValue=Math.max.apply(Math,data.map(function(o){return o.value;}));
-            var minValue=Math.min.apply(Math,data.map(function(o){return o.value;}));
-            var sumValues=0;
-            var meanValue=0;
-            for (var j=0;j<data.length;j++) {
-                sumValues+=data[j].value;
-            }
-            if (totalSamples>0) {
-                meanValue=sumValues/totalSamples;
-            }
+            var allValues = data.map( d => d.value);
+            var maxValue=Math.max.apply(null, allValues);
+            var minValue=Math.min.apply(null, allValues);
+            var sumValues = allValues.reduce((a, b) => a + b, 0);
+            var meanValue=sumValues/totalSamples;
             if ((maxValue % 1) != 0 || (minValue % 1) != 0) {
                 if (typeof maxValue % 1 == 'number' && maxValue % 1 != 0) {
                     var numDecimalsMaxValue=maxValue.toString().split('.')[1].length;
@@ -464,55 +522,54 @@ class SnapshotDp extends React.Component {
             var summary={
                 max:d3.format(",")(maxValue),
                 min:d3.format(",")(minValue),
-                datapointname:this.props.datapoint.datapointname,
-                mean:d3.format(",")(meanValue),
-                color:this.props.datapoint.color
+                mean:d3.format(",")(meanValue)
             };
         } else {
             var summary={
-                max:0,
-                min:0,
-                datapointname:this.props.datapoint.datapointname,
-                mean:0
-            }
+                max:'-',
+                min:'-',
+                mean:'-'
+            };
         }
-        return summary;
+        return (
+          <table className="table-condensed">
+            <tbody>
+              <tr>
+                <th>max</th>
+                <th>min</th>
+                <th>mean</th>
+              </tr>
+              <tr>
+                <td>{summary.max}</td>
+                <td>{summary.min}</td>
+                <td>{summary.mean}</td>
+              </tr>
+            </tbody>
+          </table>
+        );
     }
 
     render () {
-        if (this.state.summary.hasOwnProperty('datapointname')){
-            var summary=(
-              <tr>
-                <td>{this.state.summary.max}</td>
-                <td>{this.state.summary.min}</td>
-                <td>{this.state.summary.mean}</td>
-              </tr>
-            );
-        } else {
-            var summary=(
-              <tr>
-                <td></td>
-                <td></td>
-                <td></td>
-              </tr>
+        if (this.state.loading) {
+            return (
+              <div style={styles.banner}>
+                Loading...
+              </div>
             );
         }
-        var data=[{pid:this.props.datapoint.pid,color:this.props.datapoint.color,datapointname:this.props.datapoint.datapointname,data:this.state.data}]
+        var summary = this.getDataSummary();
+        var data=[{
+            pid:this.props.datapoint.pid,
+            color:this.props.datapoint.color,
+            datapointname:this.props.datapoint.datapointname,
+            data:this.state.data
+        }];
         var visContent=this.state.activeVis == 0 ?  <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} /> :
             this.state.activeVis == 1 ? <ContentHistogram data={data} /> : null;
         return (
           <div>
             <div className="dp-stats">
-              <table className="table-condensed">
-                <tbody>
-                  <tr>
-                    <th>max</th>
-                    <th>min</th>
-                    <th>mean</th>
-                  </tr>
-                  {summary}
-                </tbody>
-              </table>
+              {summary}
             </div>
             <div className="row visual-bar">
               <div className="col-md-5 text-center">
@@ -541,9 +598,8 @@ class SnapshotDp extends React.Component {
 
 class SnapshotMp extends React.Component {
     state = {
+        loading: true,
         interval: {its:this.props.its,ets:this.props.ets},
-        data: {},
-        config: {},
         activeVis: this.props.view,
         downloadCounter: this.props.downloadCounter,
     };
@@ -553,22 +609,49 @@ class SnapshotMp extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens[props.nid]=[];
-        for (var i=0,j=props.datapoints.length; i<j; i++) {
-            this.subscriptionTokens[props.nid].push({token:PubSub.subscribe('datapointDataUpdate-'+props.datapoints[i].pid, this.subscriptionHandler),msg:'datapointDataUpdate-'+props.datapoints[i].pid});
-        }
     }
+
+    async initialization () {
+        var subscribedTopics = [];
+        var dpPromises = [];
+        var newState = {};
+
+        this.props.datapoints.forEach(dp => {
+            dpPromises.push(getDatapointData(dp.pid, this.state.interval, this.props.tid));
+            subscribedTopics.push(topics.DATAPOINT_DATA_UPDATE(dp.pid));
+        });
+
+        newState.data = {};
+
+        Promise.all(dpPromises).then( values => {
+            values.forEach( value => {
+                newState.data[value.pid]=value.data;
+            });
+
+            subscribedTopics.forEach(topic => {
+                this.subscriptionTokens[this.props.nid].push({
+                    token:PubSub.subscribe(topic,this.subscriptionHandler),
+                    msg:topic
+                });
+            });
+
+            newState.loading = false;
+
+            console.log('estado inicial',newState);
+            this.setState(newState);
+        });
+    }
+
+    componentDidMount () {
+        this.initialization();
+    }
+
 
     componentWillUnmount () {
         this.subscriptionTokens[this.props.nid].forEach ( d => {
             PubSub.unsubscribe(d.token);
             });
         delete this.subscriptionTokens[this.props.nid];
-    }
-
-    componentDidMount () {
-        for (var i=0,j=this.props.datapoints.length; i<j; i++) {
-            PubSub.publish('datapointDataReq',{pid:this.props.datapoints[i].pid,interval:this.state.interval,tid:this.props.tid});
-        }
     }
 
     componentWillReceiveProps (nextProps) {
@@ -630,110 +713,172 @@ class SnapshotMp extends React.Component {
     }
 
     newIntervalCallback = (interval) => {
-        if (interval.hasOwnProperty('its') && interval.hasOwnProperty('ets')) {
-            if (interval.its<this.props.its) {
-                interval.its=this.props.its;
-            }
-            if (interval.ets>this.props.ets) {
-                interval.ets=this.props.ets;
-            }
-            if (interval.its == interval.ets) {
-                interval.its=interval.ets-3600;
-            }
-            for (var i=0;i<this.props.datapoints.length;i++) {
-                PubSub.publish('datapointDataReq',{pid:this.props.datapoints[i].pid,interval:interval,tid:this.props.tid});
-            }
-            this.refreshData(interval);
+        if (interval.its == interval.ets) {
+            interval.its=interval.ets-3600;
         }
+        if (interval.its<this.props.its) {
+            interval.its=this.props.its;
+        }
+        if (interval.ets>this.props.ets) {
+            interval.ets=this.props.ets;
+        }
+        var dpPromises = this.props.datapoints.map ( dp => {
+            return getDatapointData(dp.pid, interval, this.props.tid);
+        });
+        Promise.all(dpPromises).then( values => {
+            var data = {};
+            values.forEach( value => data[value.pid]=value.data);
+            this.setState({interval:interval, data:data});
+        });
     }
 
     subscriptionHandler = (msg,data) => {
         msgType=msg.split('-')[0];
         switch (msgType) {
-            case 'datapointDataUpdate':
+            case topics.DATAPOINT_DATA_UPDATE():
                 pid=msg.split('-')[1];
-                if ((this.state.interval.its <= data.interval.its && data.interval.its <= this.state.interval.ets) ||
-                           (this.state.interval.its <= data.interval.ets && data.interval.ets <= this.state.interval.ets)) {
-                    this.refreshData(this.state.interval, pid);
-                }
+                this.refreshData(data.interval, pid);
                 break;
         }
     }
 
-    refreshData (interval, pid) {
-        if (pid) {
-            var selectedPids=[pid];
-        } else {
-            var selectedPids=this.props.datapoints.map( d => d.pid);
+    async refreshData (interval, pid) {
+        var shouldUpdate = false;
+        if (interval.its >= this.props.its &&
+            interval.its >= this.state.interval.its &&
+            interval.ets <= this.props.ets &&
+            interval.ets <= this.state.interval.ets) {
+            var newData = await getIntervalData(pid, interval, this.props.tid);
+            //for new or different samples
+            shouldUpdate = newData.data.some( d => {
+                var haveIt = this.state.data[pid].some ( e => e.ts == d.ts && e.value == d.value);
+                return !haveIt;
+            });
+            //for deleted samples
+            if (!shouldUpdate) {
+                var intervalData = this.state.data[pid].filter( d => d.ts >= interval.its && d.ts <= interval.ets);
+                if (intervalData.length != newData.data.length) {
+                    shouldUpdate = true;
+                }
+            }
         }
-        var data=this.state.data;
-        for (var i=0;i<selectedPids.length;i++) {
-            data[selectedPids[i]]=[];
-            data[selectedPids[i]]=getIntervalData(selectedPids[i], interval);
+        if (shouldUpdate) {
+            var data = {};
+            var newInt;
+            var intervalLength = this.state.interval.ets - this.state.interval.its;
+            var newTs = newData.data.map(d => d.ts);
+            var ets = Math.max.apply(null, newTs);
+            if (ets > this.state.interval.ets) {
+                newInt = {ets:ets,its:ets-intervalLength};
+                this.props.datapoints.forEach( other_dp => {
+                    if (other_dp.pid != pid) {
+                        data[other_dp.pid] = this.state.data[other_dp.pid].filter( d => {
+                            return d.ts <= interval.ets && d.ts >= interval.its;
+                        });
+                    }
+                });
+            } else {
+                newInt = this.state.interval;
+                this.props.datapoints.forEach ( other_dp => {
+                    if (other_dp.pid != pid) {
+                        data[other_dp.pid] = this.state.data[other_dp.pid];
+                    }
+                });
+            }
+            newData = await getDatapointData(pid, newInt);
+            data[pid]=newData.data;
+            this.setState({data: data, interval:newInt});
         }
-        this.setState({interval:interval,data:data});
+    }
+
+    getDataSummary () {
+        var dps = this.props.datapoints;
+        var summary = dps.map( (dp,i) => {
+            var color = dp.color;
+            var name = dp.datapointname;
+            var data = this.state.data[dp.pid];
+            var numSamples = data.length;
+            var summary = {};
+            if (numSamples>0) {
+                var allValues = data.map( d => d.value);
+                var maxValue=Math.max.apply(null, allValues);
+                var minValue=Math.min.apply(null, allValues);
+                var sumValues = allValues.reduce((a, b) => a + b, 0);
+                var meanValue=sumValues/numSamples;
+                if ((maxValue % 1) != 0 || (minValue % 1) != 0) {
+                    if (typeof maxValue % 1 == 'number' && maxValue % 1 != 0) {
+                        var numDecimalsMaxValue=maxValue.toString().split('.')[1].length;
+                    } else {
+                        var numDecimalsMaxValue=2;
+                    }
+                    if (typeof minValue % 1 == 'number' && minValue % 1 != 0) {
+                        var numDecimalsMinValue=minValue.toString().split('.')[1].length;
+                    } else {
+                        var numDecimalsMinValue=2;
+                    }
+                    var numDecimals=Math.max(numDecimalsMaxValue,numDecimalsMinValue);
+                } else {
+                    var numDecimals=2;
+                }
+                meanValue = meanValue.toFixed(numDecimals);
+                summary.max = d3.format(',')(maxValue);
+                summary.min = d3.format(',')(minValue);
+                summary.mean = d3.format(',')(meanValue);
+            } else {
+                summary.max = '-';
+                summary.min = '-';
+                summary.mean = '-';
+            }
+            return (
+              <tr key={i}>
+                <td>
+                  <span style={{backgroundColor:color,borderRadius:"2px"}}>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                  <span> {name}</span>
+                </td>
+                <td>{summary.max}</td>
+                <td>{summary.min}</td>
+                <td>{summary.mean}</td>
+              </tr>
+            );
+        });
+        return (
+          <table className="table-condensed">
+            <tbody>
+              <tr>
+                <th></th>
+                <th>max</th>
+                <th>min</th>
+                <th>mean</th>
+              </tr>
+              {summary}
+            </tbody>
+          </table>
+        );
     }
 
     render () {
-        var summary=this.state.data.map( (element, key) => {
-            var color=null;
-            var datapointname=null;
-            for (var i=0;i<this.props.datapoints.length;i++) {
-                if (this.props.datapoints[i].pid==key) {
-                    color=this.props.datapoints[i].color;
-                    datapointname=this.props.datapoints[i].datapointname.slice(-30);
-                    break;
-                }
-            }
-            if (datapointname !== null) {
-                if (datapointname.length == 30 ) {
-                    datapointname = "..."+datapointname;
-                }
-                var dpSummary=getDataSummary(element);
-                var datapointStyle={backgroundColor: color, borderRadius: '5px'};
-                return (
-                  <tr key={key}>
-                    <td>
-                      <span style={datapointStyle}>&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                      <span> {datapointname}</span>
-                    </td>
-                    <td>{dpSummary.max}</td>
-                    <td>{dpSummary.min}</td>
-                    <td>{dpSummary.mean}</td>
-                  </tr>
-                );
-            }
-        });
-        var data=this.state.data.map( (element, key) => {
-            var color=null;
-            var datapointname=null;
-            for (var i=0;i<this.props.datapoints.length;i++) {
-                if (this.props.datapoints[i].pid==key) {
-                    color=this.props.datapoints[i].color;
-                    datapointname=this.props.datapoints[i].datapointname;
-                    break;
-                }
-            }
-            if (datapointname !== null) {
-                return {pid:key,color:color,datapointname:datapointname,data:element}
-            }
+        if (this.state.loading) {
+            return (
+              <div style={styles.banner}>
+                Loading...
+              </div>
+            );
+        }
+        var summary = this.getDataSummary();
+        var data=this.props.datapoints.map( (dp,i) => {
+            return {
+                pid:dp.pid,
+                color:dp.color,
+                datapointname:dp.datapointname,
+                data:this.state.data[dp.pid]
+            };
         });
         var visContent=this.state.activeVis == 0 ? <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} /> :
             this.state.activeVis == 1 ? <ContentHistogram data={data} /> : null;
         return (
           <div>
             <div className="dp-stats">
-              <table className="table-condensed">
-                <tbody>
-                  <tr>
-                    <th></th>
-                    <th>max</th>
-                    <th>min</th>
-                    <th>mean</th>
-                  </tr>
-                  {summary}
-                </tbody>
-              </table>
+              {summary}
             </div>
             <div className="row visual-bar">
               <div className="col-md-5 text-center">

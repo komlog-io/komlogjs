@@ -348,6 +348,7 @@ let d3Linegraph = {
     },
 
     update: function (el, data, interval, newIntervalCallback) {
+        console.log('data vale',data);
         var mouseIn = null,
             x = null,
             y = null,
@@ -359,18 +360,36 @@ let d3Linegraph = {
             height = 220 - margin.top - margin.bottom,
             width=d3.select(el).node().getBoundingClientRect().width-margin.left;
 
-        function inInterval (d) {
-            return its <= d.ts && d.ts <= ets
-        }
 
         function update_axis_domains () {
             var y_values_array=[];
+            var max_index=0;
+            var min_index=null;
             for (var i=0, j=data.length;i<j;i++) {
-                var domainData = data[i].data.filter(inInterval);
+                var domainData = data[i].data.filter((d,i) => {
+                    if (its <= d.ts && d.ts <= ets){
+                        if (i>max_index) {
+                            max_index = i;
+                        }
+                        if (min_index == null || i<min_index) {
+                            min_index = i;
+                        }
+                        return true;
+                    }
+                });
+                if (max_index < data[i].data.length -1) {
+                    domainData.push(data[i].data[max_index+1]);
+                }
+                if (min_index > 0) {
+                    domainData.push(data[i].data[min_index-1]);
+                }
+                max_index = 0;
+                min_index = 0;
                 y_values_array.push(d3.min(domainData, d => d.value ));
                 y_values_array.push(d3.max(domainData, d => d.value ));
             }
 
+            console.log('update_axis_domains',y_values_array,its,ets);
             var yDomain=d3.extent(y_values_array),
                 yMargin=(yDomain[1]-yDomain[0])*0.1;
             if (yMargin==0) {
@@ -392,7 +411,7 @@ let d3Linegraph = {
 
         function adjust_y_axis_text(selection) {
             selection.selectAll('.y-axis text')
-            .attr('transform', 'translate(-8,-8)');
+            .attr('transform', 'translate(0,-5)');
         }
 
         function make_x_axis () {
@@ -434,7 +453,7 @@ let d3Linegraph = {
             var line = d3.line()
                 .x(d => x(new Date(d.ts*1000)))
                 .y(d => y(d.value));
-
+            console.log('update_lines',data);
             var lines=svg.selectAll('.line')
                 .data(data, d => d.pid)
 
@@ -452,7 +471,7 @@ let d3Linegraph = {
                 .attr('class','line')
                 .attr('d', d => line(d.data))
                 .merge(lines)
-                .style('stroke-width',2);
+                .style('stroke-width',3);
         }
 
         function zoom (interval) {
@@ -770,7 +789,7 @@ let d3Histogram = {
         }
         function adjust_y_axis_text(selection) {
             selection.selectAll('.y-axis text')
-            .attr('transform', 'translate(-8,-8)');
+            .attr('transform', 'translate(0,-5)');
         }
         function update_x_axis () {
             svg.select('.x-axis')
@@ -1178,7 +1197,7 @@ let d3SummaryLinegraph = {
         }
         function adjust_y_axis_text(selection) {
             selection.selectAll('.y-axis text')
-            .attr('transform', 'translate(-8,-8)');
+            .attr('transform', 'translate(0,-5)');
         }
         var xAxis = d3.axisBottom(x)
             .ticks(3)
@@ -1461,27 +1480,24 @@ let d3SummaryDatasource = {
     create: function (el, datasource, ts) {
         var expanded = false;
         var dsLines = datasource.content.split('\n');
-        var margin = {top: 0, right: 0, bottom: 40, left: 0},
-            height = dsLines.length >= 10 ? 200 - margin.top - margin.bottom : dsLines*20 -margin.top - margin.bottom,
-            width=d3.select(el).node().getBoundingClientRect().width-margin.left;
+        var margin = {top: 10, right: 0, bottom: 0, left: 0};
+        var textMargin = {top: 10};
+        var height = dsLines.length*20.4 + textMargin.top;
+        if (expanded == false && height > 200) {
+            height = 200;
+        }
+        var width=d3.select(el).node().getBoundingClientRect().width-margin.left;
         var dateFormat = d3.timeFormat("%Y/%m/%d - %H:%M:%S");
         var date=new Date(ts*1000);
         var dateText=dateFormat(date);
         var dateWidth=dateText.length*8;
         var dateHeight=20;
         var dateX=width/2-dateWidth/2;
-        var dateY=height+15;
-        if (dsLines.length > 10) {
-            dsLines = dsLines.splice(0,10);
+        var dateY=10;
+        if (height >= 200) {
             var overlayClass = "overlay cursor-pointer";
-            if (expanded == true) {
-                height = dsLines.length*20 -margin.top - margin.bottom;
-            } else {
-                height = 200 - margin.top - margin.bottom;
-            }
         } else {
             var overlayClass = "overlay";
-            var contentHeight = height + margin.top + margin.bottom;
         }
 
         var svg = d3.select(el).append("svg")
@@ -1495,7 +1511,7 @@ let d3SummaryDatasource = {
             .attr("x", 0 )
             .attr("y", 0 )
             .attr("width", width)
-            .attr("height", dsLines.length*20+10 )
+            .attr("height", height)
             .attr("rx", 5)
             .attr("ry", 5)
             .style("fill", "white")
@@ -1507,8 +1523,7 @@ let d3SummaryDatasource = {
             .append("text")
             .attr("class", 'ds-line')
             .attr("x", 5)
-            .attr("y", (d,i) => (i+1)*20)
-            .attr("dy", ".4em")
+            .attr("y", (d,i) => i*20.4+14+textMargin.top)
             .style('fill','#444')
             .text( d => this.prepareLine(d));
 
@@ -1557,11 +1572,11 @@ let d3SummaryDatasource = {
 
     update: function (el, datasource, ts, expanded) {
         var dsLines = datasource.content.split('\n');
-        var margin = {top: 0, right: 0, bottom: 40, left: 0};
-        if (expanded == true) {
-            var height = dsLines.length*20 -margin.top - margin.bottom;
-        } else {
-            var height = 200 - margin.top - margin.bottom;
+        var margin = {top: 10, right: 0, bottom: 0, left: 0};
+        var textMargin = {top: 10};
+        var height = dsLines.length*20.4 +textMargin.top;
+        if (expanded == false && height > 200) {
+            height = 200;
         }
         var width=d3.select(el).node().getBoundingClientRect().width-margin.left;
         var dateFormat = d3.timeFormat("%Y/%m/%d - %H:%M:%S");
@@ -1570,19 +1585,13 @@ let d3SummaryDatasource = {
         var dateWidth=dateText.length*8;
         var dateHeight=20;
         var dateX=width/2-dateWidth/2;
-        var dateY=height+15;
-        if (dsLines.length > 10) {
-            var overlayClass= "overlay cursor-pointer";
-            if (expanded == true) {
-                var contentHeight= height + margin.top + margin.bottom;
-            } else {
-                dsLines = dsLines.splice(0,10)
-                var contentHeight= dsLines.length*20+10;
-            }
+        var dateY=10;
+        if ( height >= 200) {
+            var overlayClass = "overlay cursor-pointer";
         } else {
-            var overlayClass= "overlay cursor-pointer";
-            var contentHeight= height + margin.top + margin.bottom;
+            var overlayClass = "overlay";
         }
+
         d3.select(el)
             .select("svg")
             .transition()
@@ -1598,7 +1607,7 @@ let d3SummaryDatasource = {
             .transition()
             .duration(300)
             .attr("width", width)
-            .attr("height", contentHeight );
+            .attr("height", height);
 
         svg.selectAll('.ds-line')
             .data(dsLines)
@@ -1606,8 +1615,7 @@ let d3SummaryDatasource = {
             .append("text")
             .attr("class", 'ds-line')
             .attr("x", 5)
-            .attr("y", (d,i) => (i+1)*20)
-            .attr("dy", ".4em")
+            .attr("y", (d,i) => i*20.4+14+textMargin.top)
             .style('fill','#444')
             .text( d => this.prepareLine(d));
 

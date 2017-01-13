@@ -1,7 +1,8 @@
 import React from 'react';
 import PubSub from 'pubsub-js';
 import Dashboard from './dashboard.jsx';
-import {dashboardStore} from './dashboard-store.js';
+import {getDashboardConfig} from './dashboard-store.js';
+import {topics} from './types.js';
 
 class Workspace extends React.Component {
     state = {
@@ -9,20 +10,22 @@ class Workspace extends React.Component {
         activeDashboard: '0',
     };
 
-    subscriptionTokens = [];
+    initialization () {
+        var subscribedTopics = [
+            topics.SHOW_DASHBOARD
+        ];
 
-    constructor (props) {
-        super (props);
-        this.subscriptionTokens.push({token:PubSub.subscribe('showDashboard', this.subscriptionHandler),msg:'showDashboard'});
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
+        });
+
     }
 
-
-    subscriptionHandler = (msg,data) => {
-        switch(msg) {
-            case 'showDashboard':
-                this.switchActiveDashboard(data.bid)
-                break;
-        }
+    componentDidMount () {
+        this.initialization();
     }
 
     componentWillUnmount () {
@@ -31,38 +34,50 @@ class Workspace extends React.Component {
         });
     }
 
-    switchActiveDashboard (bid) {
-        if (this.state.activeDashboard.toString() == bid.toString()) {
+    subscriptionHandler = (msg,data) => {
+        switch(msg) {
+            case topics.SHOW_DASHBOARD:
+                this.switchActiveDashboard(data.bid)
+                break;
+        }
+    }
+
+    async switchActiveDashboard (bid) {
+        if (this.state.activeDashboard == bid) {
             return;
-        } else {
-            for (var i=0; i<this.state.dashboards.length; i++) {
-                if (this.state.dashboards[i].bid.toString() == bid.toString()) {
-                    this.setState({activeDashboard:bid.toString()});
-                    return;
-                }
-            }
-            var dashboard=dashboardStore._dashboardConfig[bid.toString()];
-            if (dashboard != undefined && dashboard.dashboardname != undefined) {
-                var dashboards=this.state.dashboards
-                dashboards.push({bid:bid.toString()})
-                this.setState({dashboards:dashboards,activeDashboard:bid.toString()})
-            }
+        }
+        var dashboards = this.state.dashboards;
+        var alreadyExists = dashboards.some ( db => db.bid == bid);
+        if (alreadyExists) {
+            this.setState({activeDashboard:bid});
+            return;
+        }
+        var dbConfig = await getDashboardConfig(bid);
+        if (dbConfig) {
+            dashboards.push({bid:bid});
+            this.setState({activeDashboard:bid, dashboards:dashboards});
+            return;
         }
     }
 
     closeDashboard (bid) {
-        if (bid.toString() != '0') {
-            var dashboards=this.state.dashboards.filter( el => {
-                return el.bid.toString() !== bid.toString();
-            });
-            this.setState({activeDashboard:'0',dashboards:dashboards})
+        if (bid != '0') {
+            var newState = {}
+            var exists = this.state.dashboards.some ( db => db.bid == bid);
+            if (exists) {
+                newState.dashboards=this.state.dashboards.filter( el => el.bid !== bid);
+                if (this.state.activeDashboard == bid) {
+                    newState.activeDashboard = '0';
+                }
+                this.setState(newState);
+            }
         }
     }
 
     getDashboards () {
-        var dashboards=this.state.dashboards.map( el => {
-            var active = this.state.activeDashboard == el.bid ? true : false;
-            return <Dashboard key={el.bid} bid={el.bid} active={active} closeCallback={this.closeDashboard} />
+        var dashboards=this.state.dashboards.map( db => {
+            var active = this.state.activeDashboard == db.bid ? true : false;
+            return <Dashboard key={db.bid} bid={db.bid} active={active} closeCallback={this.closeDashboard} />
         });
         return dashboards;
     }
@@ -80,71 +95,4 @@ class Workspace extends React.Component {
 export {
     Workspace
 }
-
-/*
-var Workspace= React.createClass({
-    getInitialState: function () {
-        return {
-                dashboards: [{bid:'0'}],
-                activeDashboard: '0',
-               }
-    },
-    subscriptionTokens: [],
-    subscriptionHandler: function(msg,data) {
-        switch(msg){
-            case 'showDashboard':
-                this.switchActiveDashboard(data.bid)
-                break;
-        }
-    },
-    componentWillMount: function () {
-        this.subscriptionTokens.push({token:PubSub.subscribe('showDashboard', this.subscriptionHandler),msg:'showDashboard'});
-    },
-    componentWillUnmount: function () {
-        this.subscriptionTokens.map(function (d) {
-            PubSub.unsubscribe(d.token)
-            });
-    },
-    switchActiveDashboard: function (bid) {
-        console.log('switchActiveDashboard');
-        if (this.state.activeDashboard.toString() == bid.toString()) {
-            console.log('same Dashboard');
-            return;
-        } else {
-            for (var i=0; i<this.state.dashboards.length; i++) {
-                if (this.state.dashboards[i].bid.toString() == bid.toString()) {
-                    this.setState({activeDashboard:bid.toString()});
-                    return;
-                }
-            }
-            dashboard=dashboardStore._dashboardConfig[bid.toString()];
-            if (dashboard != undefined && dashboard.dashboardname != undefined) {
-                dashboards=this.state.dashboards
-                dashboards.push({bid:bid.toString()})
-                this.setState({dashboards:dashboards,activeDashboard:bid.toString()})
-            }
-        }
-    },
-    closeDashboard: function (bid) {
-        if (bid.toString() != '0') {
-            dashboards=this.state.dashboards.filter(function (el) {
-                return el.bid.toString() !== bid.toString();
-            });
-            this.setState({activeDashboard:'0',dashboards:dashboards})
-        }
-    },
-    getDashboards: function () {
-        dashboards=this.state.dashboards.map(function (el) {
-            active=this.state.activeDashboard == el.bid ? true : false;
-            return React.createElement(Dashboard, {key:el.bid, bid:el.bid, active:active, closeCallback:this.closeDashboard})
-        }.bind(this));
-        return dashboards;
-    },
-    render: function () {
-        dashboards = this.getDashboards()
-        return React.createElement('div', {className:"workspace"}, dashboards)
-    },
-});
-*/
-
 

@@ -1,142 +1,160 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
+import {topics} from './types.js';
 
 class DashboardStore {
     constructor () {
+        this.minConfigRequestIntervalms = 300000;
+        this.minGlobalConfigRequestIntervalms = 300000;
+
         this._dashboardConfig = {};
-        this.subscriptionTokens = [];
-        this.subscriptionTokens.push({token:PubSub.subscribe('dashboardsConfigReq', this.subscriptionHandler.bind(this)),msg:'dashboardsConfigReq'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('dashboardConfigReq', this.subscriptionHandler.bind(this)),msg:'dashboardConfigReq'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('newDashboard', this.subscriptionHandler.bind(this)),msg:'newDashboard'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('modifyDashboard', this.subscriptionHandler.bind(this)),msg:'modifyDashboard'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('deleteDashboard', this.subscriptionHandler.bind(this)),msg:'deleteDashboard'});
+        this._lastConfigUpdate = {};
+        this._lastGlobalConfigUpdate = null;
+
+        var subscribedTopics = [
+            topics.DASHBOARDS_CONFIG_REQUEST,
+            topics.DASHBOARD_CONFIG_REQUEST,
+            topics.NEW_DASHBOARD,
+            topics.MODIFY_DASHBOARD,
+            topics.DELETE_DASHBOARD,
+        ];
+
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
+        });
+
     }
 
     subscriptionHandler (msg, data) {
         switch (msg) {
-            case 'dashboardsConfigReq':
-                processMsgDashboardsConfigReq();
+            case topics.DASHBOARDS_CONFIG_REQUEST:
+                processMsgDashboardsConfigRequest();
                 break;
-            case 'dashboardConfigReq':
-                processMsgDashboardConfigReq(data);
+            case topics.DASHBOARD_CONFIG_REQUEST:
+                processMsgDashboardConfigRequest(data);
                 break;
-            case 'newDashboard':
+            case topics.NEW_DASHBOARD:
                 processMsgNewDashboard(data);
                 break;
-            case 'modifyDashboard':
+            case topics.MODIFY_DASHBOARD:
                 processMsgModifyDashboard(data);
                 break;
-            case 'deleteDashboard':
+            case topics.DELETE_DASHBOARD:
                 processMsgDeleteDashboard(data);
                 break;
         }
     }
 
+    updateLastConfigUpdate (bid) {
+        var now=new Date().getTime();
+        this._lastConfigUpdate[bid] = now;
+    }
+
+    getLastConfigUpdate (bid) {
+        if (this._lastConfigUpdate.hasOwnProperty(bid)) {
+            return this._lastConfigUpdate[bid];
+        } else {
+            return 0;
+        }
+    }
+
+    getConfig ({bid, force}={}) {
+        var now=new Date().getTime();
+        if (!bid) {
+            console.log('getConfig total');
+            if (!this.lastGlobalConfigUpdate) {
+                var elapsed = now;
+            } else {
+                var elapsed = now - this.lastGlobalConfigUpdate;
+            }
+            if ( force == true || elapsed > this.minGlobalConfigRequestIntervalms) {
+                console.log('getConfig total remota');
+                var config;
+                var promise = new Promise( (resolve, reject) => {
+                    $.ajax({
+                        url: '/etc/db/',
+                        dataType: 'json',
+                    })
+                    .done( data => {
+                        this.lastGlobalConfigUpdate = now;
+                        data.forEach( db => {
+                            var result = this.storeConfig(db.bid, db);
+                            this.updateLastConfigUpdate(db.bid);
+                        });
+                        config = data;
+                        resolve(config);
+                    });
+                });
+                return promise;
+            } else {
+                console.log('getConfig total local');
+                var config = Object.keys(this._dashboardConfig).map( key => this._dashboardConfig[key]);
+                return Promise.resolve(config);
+            }
+        } else {
+            console.log('getConfig parcial');
+            var elapsed = now - this.getLastConfigUpdate(bid);
+            if ( force == true || elapsed > this.minConfigRequestIntervalms) {
+                console.log('getConfig parcial remota');
+                var config;
+                var promise = new Promise( (resolve, reject) => {
+                    $.ajax({
+                        url: '/etc/db/'+bid,
+                        dataType: 'json',
+                    })
+                    .done( data => {
+                        var result = this.storeConfig(bid, data);
+                        this.updateLastConfigUpdate(bid);
+                        if (result.modified == true) {
+                            var topic = topics.DASHBOARD_CONFIG_UPDATE(bid);
+                            PubSub.publish(topic,{bid:bid});
+                        }
+                        config = data;
+                        resolve(config);
+                    });
+                });
+                return promise;
+            } else {
+                console.log('getConfig parcial local');
+                var config = this._dashboardConfig[bid];
+                return Promise.resolve(config);
+            }
+        }
+    }
+
     storeConfig (bid, data) {
-        var doStore=false;
+        var result = {};
         if (!this._dashboardConfig.hasOwnProperty(bid)) {
-            this._dashboardConfig[bid]={}
-            Object.keys(data).forEach(key => {
-                this._dashboardConfig[bid][key]=data[key];
-            });
-            doStore=true
+            this._dashboardConfig[bid]=data;
+            result.modified = true;
         }
         else {
-            Object.keys(data).forEach(key => {
-                if (key=='dashboardname' && this._dashboardConfig[bid].dashboardname != data[key]) {
-                    doStore=true;
-                } else if (key == 'wids') {
-                    if (data.wids.length != this._dashboardConfig[bid].wids.length) {
-                        doStore = true;
-                    } else {
-                        for (var i=0;i<data.wids.length;i++) {
-                            if (this._dashboardConfig[bid].wids.indexOf(data.wids[i])==-1) {
-                                doStore = true;
-                                break;
-                            }
-                        }
-                    }
-                }
+            var differs = Object.keys(data).some( key => {
+                return !(this._dashboardConfig[bid].hasOwnProperty(key) && this._dashboardConfig[bid][key]==data[key]);
             });
-            if (doStore) {
-                this._dashboardConfig[bid]=data
+            if (differs) {
+                this._dashboardConfig[bid]=data;
+                result.modified = true;
             }
         }
-        return doStore;
+        return result;
     }
 }
-
-/*
-
-function DashboardStore () {
-    this._dashboardConfig = {};
-    this.subscriptionTokens = [];
-
-    this.subscriptionTokens.push({token:PubSub.subscribe('dashboardsConfigReq', this.subscriptionHandler.bind(this)),msg:'dashboardsConfigReq'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('dashboardConfigReq', this.subscriptionHandler.bind(this)),msg:'dashboardConfigReq'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('newDashboard', this.subscriptionHandler.bind(this)),msg:'newDashboard'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('modifyDashboard', this.subscriptionHandler.bind(this)),msg:'modifyDashboard'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('deleteDashboard', this.subscriptionHandler.bind(this)),msg:'deleteDashboard'});
-
-}
-
-DashboardStore.prototype = {
-    subscriptionHandler: function (msg, data) {
-        switch (msg) {
-            case 'dashboardsConfigReq':
-                processMsgDashboardsConfigReq()
-                break;
-            case 'dashboardConfigReq':
-                processMsgDashboardConfigReq(data)
-                break;
-            case 'newDashboard':
-                processMsgNewDashboard(data)
-                break;
-            case 'modifyDashboard':
-                processMsgModifyDashboard(data)
-                break;
-            case 'deleteDashboard':
-                processMsgDeleteDashboard(data)
-                break;
-        }
-    },
-    storeConfig: function (bid, data) {
-        doStore=false
-        if (!this._dashboardConfig.hasOwnProperty(bid)) {
-            this._dashboardConfig[bid]={}
-            $.each(data, function (key,value) {
-                this._dashboardConfig[bid][key]=value
-            }.bind(this));
-            doStore=true
-        }
-        else {
-            $.each(data, function (key,value) {
-                if (key=='dashboardname' && this._dashboardConfig[bid].dashboardname != value) {
-                    doStore=true
-                } else if (key == 'wids') {
-                    if (data.wids.length != this._dashboardConfig[bid].wids.length) {
-                        doStore = true
-                    } else {
-                        for (var i=0;i<data.wids.length;i++) {
-                            if (this._dashboardConfig[bid].wids.indexOf(data.wids[i])==-1) {
-                                doStore = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }.bind(this));
-            if (doStore) {
-                this._dashboardConfig[bid]=data
-            }
-        }
-        return doStore;
-    }
-};
-
-*/
 
 let dashboardStore = new DashboardStore();
+
+function getDashboardConfig (bid) {
+    return dashboardStore.getConfig({bid:bid});
+}
+
+function processMsgDashboardConfigRequest(msgData) {
+    if (msgData.bid) {
+        dashboardStore.getConfig({bid:msgData.bid,force:msgData.force});
+    }
+}
 
 function processMsgNewDashboard (msgData) {
     var requestData={dashboardname:msgData.dashboardname};
@@ -147,11 +165,19 @@ function processMsgNewDashboard (msgData) {
         data: JSON.stringify(requestData),
     })
     .done( data => {
-        PubSub.publish('dashboardConfigReq',{bid:data.bid})
-        PubSub.publish('barMessage',{message:{type:'success',message:'Dashboard created successfully'},messageTime:(new Date).getTime()})
+        PubSub.publish(topics.DASHBOARD_CONFIG_REQUEST,{bid:data.bid})
+        var payload = {
+            message:{type:'success',message:'Dashboard created successfully'},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE, payload);
     })
     .fail( data => {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating dashboard. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
+        var payload = {
+            message:{type:'danger',message:'Error creating dashboard. Code: '+data.responseJSON.error},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE, payload);
     });
 }
 
@@ -180,7 +206,7 @@ function processMsgModifyDashboard (msgData) {
         });
     }
     var endModify = () => {
-        PubSub.publish('dashboardConfigReq',{bid:msgData.bid})
+        PubSub.publish(topics.DASHBOARD_CONFIG_REQUEST,{bid:msgData.bid, force:true});
     }
     var requests=[];
     if (msgData.hasOwnProperty('new_dashboardname')) {
@@ -229,64 +255,19 @@ function processMsgDeleteDashboard (msgData) {
             type: 'DELETE',
         })
         .then( data => {
-            PubSub.publish('dashboardConfigUpdate',{})
+            PubSub.publish(topics.DASHBOARD_CONFIG_UPDATE(msgData.bid),{bid:msgData.bid});
         }, data => {
-            PubSub.publish('barMessage',{message:{type:'danger',message:'Error deleting dashboard. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
+            var payload = {
+                message:{type:'danger',message:'Error deleting dashboard. Code: '+data.responseJSON.error},
+                messageTime:(new Date).getTime()
+            };
+            PubSub.publish(topics.BAR_MESSAGE,payload);
         });
     }
 }
 
-function processMsgDashboardsConfigReq () {
-    if (Object.keys(dashboardStore._dashboardConfig).length == 0) {
-        requestDashboardsConfig()
-    }
-}
-
-function requestDashboardsConfig () {
-    $.ajax({
-        url: '/etc/db',
-        dataType: 'json',
-    })
-    .done( data => {
-        for (var i=0;i<data.length;i++) {
-            if (data[i].hasOwnProperty('bid')) {
-                dashboardStore.storeConfig(data[i].bid, data[i]);
-            }
-        }
-        PubSub.publish('dashboardConfigUpdate',{})
-    });
-}
-
-function processMsgDashboardConfigReq (data) {
-    if (data.hasOwnProperty('bid')) {
-        if (dashboardStore._dashboardConfig.hasOwnProperty(data.bid)) {
-            sendDashboardConfigUpdate(data.bid)
-        }
-        requestDashboardConfig(data.bid)
-    }
-}
-
-function requestDashboardConfig (bid) {
-    $.ajax({
-        url: '/etc/db/'+bid,
-        dataType: 'json',
-    })
-    .done( data => {
-        var changed = dashboardStore.storeConfig(bid, data);
-        if (changed) {
-            sendDashboardConfigUpdate(bid);
-        }
-    })
-}
-
-function sendDashboardConfigUpdate (bid) {
-    if (dashboardStore._dashboardConfig.hasOwnProperty(bid)) {
-        PubSub.publish('dashboardConfigUpdate.'+bid,{bid:bid})
-    }
-}
-
 export {
-    dashboardStore
+    getDashboardConfig
 }
 
 

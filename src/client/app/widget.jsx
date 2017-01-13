@@ -4,10 +4,11 @@ import PubSub from 'pubsub-js';
 import * as ReactBootstrap from 'react-bootstrap';
 import * as d3 from 'd3';
 import * as utils from './utils.js';
-import {widgetStore} from './widget-store.js';
-import {datasourceStore} from './datasource-store.js';
-import {datapointStore,getDataSummary, getIntervalData} from './datapoint-store.js';
+import {getWidgetConfig} from './widget-store.js';
+import {getDatasourceConfig, getDatasourceData, getDatasourceSnapshotData} from './datasource-store.js';
+import {getDatapointConfig, getDatapointData} from './datapoint-store.js';
 import {d3TimeSlider, d3Linegraph, d3Histogram} from './graphs.jsx';
+import {topics, styles} from './types.js';
 
 class Widget extends React.Component {
     state = {
@@ -21,24 +22,32 @@ class Widget extends React.Component {
 
     constructor (props) {
         super(props);
-        this.subscriptionTokens[props.wid]=[]
-        this.subscriptionTokens[props.wid].push({token:PubSub.subscribe('widgetConfigUpdate-'+props.wid, this.subscriptionHandler),msg:'widgetConfigUpdate-'+props.wid});
+        this.subscriptionTokens[props.wid]=[];
     }
 
     subscriptionHandler = (msg,data) => {
         switch (msg) {
-            case 'widgetConfigUpdate-'+this.props.wid:
-                this.refreshConfig()
+            case topics.WIDGET_CONFIG_UPDATE(this.props.wid):
+                this.refreshConfig();
                 break;
         }
     }
 
+    async initialization () {
+        var conf = await getWidgetConfig(this.props.wid);
+        this.subscriptionTokens[this.props.wid].push({
+            token:PubSub.subscribe(topics.WIDGET_CONFIG_UPDATE(this.props.wid), this.subscriptionHandler),
+            msg:topics.WIDGET_CONFIG_UPDATE(this.props.wid)
+        });
+        this.setState({conf:conf});
+    }
+
     componentDidMount () {
-        PubSub.publish('widgetConfigReq',{wid:this.props.wid});
+        this.initialization();
     }
 
     componentWillUnmount () {
-        this.subscriptionTokens[this.props.wid].map( d => {
+        this.subscriptionTokens[this.props.wid].forEach( d => {
             PubSub.unsubscribe(d.token);
         });
         delete this.subscriptionTokens[this.props.wid];
@@ -46,7 +55,7 @@ class Widget extends React.Component {
 
     configCallback = () => {
         if (this.state.showConfig == false) {
-            PubSub.publish('widgetConfigReq',{wid:this.props.wid});
+            PubSub.publish(topics:WIDGET_CONFIG_REQUEST,{wid:this.props.wid});
         }
         this.setState({showConfig:!this.state.showConfig});
     }
@@ -67,23 +76,18 @@ class Widget extends React.Component {
         PubSub.publish('barMessage',{message:data.message,messageTime:data.messageTime});
     }
 
-    refreshConfig () {
-        if (widgetStore._widgetConfig.hasOwnProperty(this.props.wid)) {
-            var widgetConfig=widgetStore._widgetConfig[this.props.wid];
-            var shouldUpdate=false;
-            Object.keys(widgetConfig).forEach( key => {
-                if (!(this.state.conf.hasOwnProperty(key) && this.state.conf[key]==widgetConfig[key])) {
-                    shouldUpdate=true;
-                }
-            });
-            if (shouldUpdate) {
-                this.setState({conf:widgetConfig});
-            }
+    async refreshConfig () {
+        var newConfig = await getWidgetConfig(this.props.wid);
+        var shouldUpdate = Object.keys(newConfig).some( key => {
+            return !(this.state.conf.hasOwnProperty(key) && this.state.conf[key]==newConfig[key]);
+        });
+        if (shouldUpdate) {
+            this.setState({conf:newConfig});
         }
     }
 
     getWidgetContentEl () {
-        if (Object.keys(this.state.conf).length === 0) {
+        if (Object.keys(this.state.conf).length == 0) {
             return null;
         } else {
             switch (this.state.conf.type) {
@@ -100,7 +104,7 @@ class Widget extends React.Component {
     }
 
     getWidgetConfigEl () {
-        if (Object.keys(this.state.conf).length === 0) {
+        if (Object.keys(this.state.conf).length == 0) {
             return null;
         } else {
             switch (this.state.conf.type) {
@@ -232,10 +236,14 @@ class WidgetBar extends React.Component {
         } else {
             var pinIcon=null;
         }
-        if (this.props.configOpen) {
-            var configIcon=<span className="SlideBarIcon glyphicon glyphicon-chevron-down" style={this.styles.lefticonstyle} onClick={this.configClick} />
+        if (!this.props.conf.widgetname || this.props.conf.widgetname.split(':').length > 1){
+            var configIcon= <span style={this.styles.lefticonstyle}>{' '}</span>
         } else {
-            var configIcon=<span className="SlideBarIcon glyphicon glyphicon-chevron-right" style={this.styles.lefticonstyle} onClick={this.configClick} />
+            if (this.props.configOpen) {
+                var configIcon=<span className="SlideBarIcon glyphicon glyphicon-chevron-down" style={this.styles.lefticonstyle} onClick={this.configClick} />
+            } else {
+                var configIcon=<span className="SlideBarIcon glyphicon glyphicon-chevron-right" style={this.styles.lefticonstyle} onClick={this.configClick} />
+            }
         }
         return (
           <div className="SlideBar panel-heading">
@@ -254,6 +262,7 @@ class WidgetBar extends React.Component {
 
 class WidgetConfigDs extends React.Component {
     state = {
+        loading: true,
         did: null,
         datasourcename: '',
         deleteModal: false,
@@ -264,23 +273,39 @@ class WidgetConfigDs extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens['cfg-'+props.wid]=[];
-        this.subscriptionTokens['cfg-'+props.wid].push({token:PubSub.subscribe('widgetConfigUpdate-'+props.wid, this.subscriptionHandler),msg:'widgetConfigUpdate-'+props.wid});
     }
 
     subscriptionHandler = (msg,data) => {
-        var msgType = msg.split('-')[0];
-        switch (msgType) {
-            case 'datasourceConfigUpdate':
+        switch (msg) {
+            case topics.DATASOURCE_CONFIG_UPDATE(this.state.did):
                 this.refreshConfig();
                 break;
-            case 'widgetConfigUpdate':
+            case topics.WIDGET_CONFIG_UPDATE(this.props.wid):
                 this.refreshConfig();
                 break;
         }
     }
 
+    async initialization () {
+        var config = await getWidgetConfig(this.props.wid);
+        var datasource = await getDatasourceConfig(config.did);
+        var subscribedTopics = [
+            topics.WIDGET_CONFIG_UPDATE(this.props.wid),
+            topics.DATASOURCE_CONFIG_UPDATE(config.did)
+        ];
+
+        subscribedTopics.forEach(topic => {
+            this.subscriptionTokens['cfg-'+this.props.wid].push({
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            });
+        });
+
+        this.setState({did:config.did, datasourcename:datasource.datasourcename, loading:false});
+    }
+
     componentDidMount () {
-        this.refreshConfig();
+        this.initialization();
     }
 
     componentWillUnmount = () => {
@@ -290,36 +315,17 @@ class WidgetConfigDs extends React.Component {
         delete this.subscriptionTokens['cfg-'+this.props.wid];
     }
 
-    refreshConfig () {
-        if (!this.state.did) {
-            if (widgetStore._widgetConfig.hasOwnProperty(this.props.wid)) {
-                var widgetConfig = widgetStore._widgetConfig[this.props.wid];
-                var did = widgetConfig.did;
-                var tokens = this.subscriptionTokens['cfg-'+this.props.wid];
-                var configTokenFound = false;
-                for (var i=0; i<tokens.length;i++) {
-                    if (tokens[i].msg == 'datasourceConfigUpdate-'+did) {
-                        configTokenFound = true;
-                        break;
-                    }
-                }
-                if (!configTokenFound) {
-                    tokens.push({token:PubSub.subscribe('datasourceConfigUpdate-'+did, this.subscriptionHandler),msg:'datasourceConfigUpdate-'+did});
-                }
-                if (!datasourceStore._datasourceConfig.hasOwnProperty(did)) {
-                    PubSub.publish('datasourceConfigReq',{did:did});
-                }
-                this.setState({did:did});
-            } else {
-                PubSub.publish('widgetConfigReq',{wid:this.props.wid});
-            }
-        } else if (datasourceStore._datasourceConfig.hasOwnProperty(this.state.did)) {
-            var datasourceConfig=datasourceStore._datasourceConfig[this.state.did];
-            if (this.state.datasourcename != datasourceConfig.datasourcename) {
-                this.setState({datasourcename:datasourceConfig.datasourcename});
-            }
-        } else {
-            PubSub.publish('datasourceConfigReq',{did:this.state.did});
+    async refreshConfig () {
+        var did = this.state.did;
+        if (!did) {
+            var config = await getWidgetConfig(this.props.wid);
+            did = config.did;
+        }
+        var datasource = await getDatasourceConfig(did);
+        var newState = {did:did, datasourcename:datasource.datasourcename};
+        var refresh = Object.keys(newState).some( key => newState[key] != this.state[key]);
+        if (refresh) {
+            this.setState(newState);
         }
     }
 
@@ -338,6 +344,17 @@ class WidgetConfigDs extends React.Component {
     }
 
     render () {
+        if (this.state.loading) {
+            return (
+              <ReactBootstrap.Collapse in={this.props.showConfig}>
+                <div style={styles.banner}>
+                  Loading ...
+                </div>
+              </ReactBootstrap.Collapse>
+            );
+        } else if (this.state.datasourcename.split(':').length > 1) {
+            return null;
+        }
         var delete_modal=(
           <ReactBootstrap.Modal show={this.state.deleteModal} onHide={this.cancelDelete}>
             <ReactBootstrap.Modal.Header closeButton={true}>
@@ -385,10 +402,7 @@ class WidgetConfigDs extends React.Component {
 
 class WidgetConfigDp extends React.Component {
     state = {
-        pid: null,
-        datapointname: null,
-        color: null,
-        boxColor: null,
+        loading: true,
         newColor: '',
         deleteModal: false,
         updateDisabled: true,
@@ -399,30 +413,52 @@ class WidgetConfigDp extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens['cfg-'+props.wid]=[];
-        this.subscriptionTokens['cfg-'+props.wid].push({token:PubSub.subscribe('widgetConfigUpdate-'+props.wid, this.subscriptionHandler),msg:'widgetConfigUpdate-'+props.wid});
     }
 
-    subscriptionHandler = (msg,data) => {
-        var msgType = msg.split('-')[0];
-        switch (msgType) {
-            case 'datapointConfigUpdate':
-                this.refreshConfig();
-                break;
-            case 'widgetConfigUpdate':
-                this.refreshConfig();
-                break;
-        }
+    async initialization () {
+        var config = await getWidgetConfig(this.props.wid);
+        var datapoint = await getDatapointConfig(config.pid);
+        var subscribedTopics = [
+            topics.WIDGET_CONFIG_UPDATE(this.props.wid),
+            topics.DATAPOINT_CONFIG_UPDATE(config.pid)
+        ];
+
+        subscribedTopics.forEach(topic => {
+            this.subscriptionTokens['cfg-'+this.props.wid].push({
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            });
+        });
+
+        this.setState({
+            pid:config.pid,
+            datapointname:datapoint.datapointname,
+            color: datapoint.color,
+            boxColor: datapoint.color,
+            loading:false
+        });
     }
 
     componentDidMount () {
-        this.refreshConfig();
+        this.initialization();
     }
 
     componentWillUnmount () {
-        this.subscriptionTokens['cfg-'+this.props.wid].map( d => {
+        this.subscriptionTokens['cfg-'+this.props.wid].forEach( d => {
             PubSub.unsubscribe(d.token);
         });
         delete this.subscriptionTokens['cfg-'+this.props.wid];
+    }
+
+    subscriptionHandler = (msg,data) => {
+        switch (msg) {
+            case topics.DATAPOINT_CONFIG_UPDATE(this.state.pid):
+                this.refreshConfig();
+                break;
+            case topics.WIDGET_CONFIG_UPDATE(this.props.wid):
+                this.refreshConfig();
+                break;
+        }
     }
 
     handleChange = (e) => {
@@ -435,42 +471,22 @@ class WidgetConfigDp extends React.Component {
         this.setState(newState);
     }
 
-    refreshConfig () {
-        if (!this.state.pid) {
-            if (widgetStore._widgetConfig.hasOwnProperty(this.props.wid)) {
-                var widgetConfig = widgetStore._widgetConfig[this.props.wid];
-                var pid = widgetConfig.pid;
-                var tokens = this.subscriptionTokens['cfg-'+this.props.wid];
-                var configTokenFound = false;
-                for (var i=0; i<tokens.length;i++) {
-                    if (tokens[i].msg == 'datapointConfigUpdate-'+pid) {
-                        configTokenFound = true;
-                        break;
-                    }
-                }
-                if (!configTokenFound) {
-                    tokens.push({token:PubSub.subscribe('datapointConfigUpdate-'+pid, this.subscriptionHandler),msg:'datapointConfigUpdate-'+pid});
-                }
-                if (!this.state.datapointname) {
-                    PubSub.publish('datapointConfigReq',{pid:pid});
-                }
-                this.setState({pid:pid});
-            } else {
-                PubSub.publish('widgetConfigReq',{wid:this.props.wid});
-            }
-        } else if (datapointStore._datapointConfig.hasOwnProperty(this.state.pid)) {
-            var datapointConfig=datapointStore._datapointConfig[this.state.pid];
-            var shouldUpdate = false;
-            if (this.state.datapointname != datapointConfig.datapointname) {
-                shouldUpdate = true;
-            } else if (this.state.color != datapointConfig.color) {
-                shouldUpdate = true;
-            }
-            if (shouldUpdate) {
-                this.setState({datapointname:datapointConfig.datapointname,color:datapointConfig.color,boxColor:datapointConfig.color});
-            }
-        } else {
-            PubSub.publish('datapointConfigReq',{pid:this.state.pid});
+    async refreshConfig () {
+        var pid = this.state.pid;
+        if (!pid) {
+            var config = await getWidgetConfig(this.props.wid);
+            pid = config.pid;
+        }
+        var datapoint = await getDatapointConfig(pid);
+        var newState = {
+            pid:pid,
+            datapointname:datapoint.datapointname,
+            color:datapoint.color,
+            boxColor:datapoint.color
+        };
+        var refresh = Object.keys(newState).some( key => newState[key] != this.state[key]);
+        if (refresh) {
+            this.setState(newState);
         }
     }
 
@@ -497,7 +513,15 @@ class WidgetConfigDp extends React.Component {
     }
 
     render () {
-        if (!this.state.datapointname) {
+        if (this.state.loading) {
+            return (
+              <ReactBootstrap.Collapse in={this.props.showConfig}>
+                <div style={styles.banner}>
+                  Loading ...
+                </div>
+              </ReactBootstrap.Collapse>
+            );
+        } else if (this.state.datapointname.split(':').length > 1) {
             return null;
         }
         var delete_modal=(
@@ -576,6 +600,7 @@ class WidgetConfigDp extends React.Component {
 
 class WidgetConfigMp extends React.Component {
     state = {
+        loading: true,
         deleteModal: false,
         datapoints: [],
         widgetname: '',
@@ -587,7 +612,55 @@ class WidgetConfigMp extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens['cfg-'+props.wid]=[];
-        this.subscriptionTokens['cfg-'+props.wid].push({token:PubSub.subscribe('widgetConfigUpdate-'+props.wid, this.subscriptionHandler),msg:'widgetConfigUpdate-'+props.wid});
+    }
+
+    async initialization () {
+        var config = await getWidgetConfig(this.props.wid);
+        var pids = config.datapoints;
+        var promises = pids.map ( pid => getDatapointConfig(pid));
+        var subscribedTopics = [
+            topics.WIDGET_CONFIG_UPDATE(this.props.wid),
+        ];
+
+        Promise.all(promises).then (values => {
+            var datapoints = [];
+
+            values.forEach( value => {
+                var dpInfo = {
+                    pid:value.pid,
+                    color:value.color,
+                    datapointname:value.datapointname,
+                    lineThrough: false,
+                };
+                datapoints.push(dpInfo);
+                subscribedTopics.push(topics.DATAPOINT_CONFIG_UPDATE(value.pid));
+            });
+
+            subscribedTopics.forEach(topic => {
+                this.subscriptionTokens['cfg-'+this.props.wid].push({
+                    token:PubSub.subscribe(topic,this.subscriptionHandler),
+                    msg:topic
+                });
+            });
+
+            this.setState({
+                datapoints:datapoints,
+                widgetname:config.widgetname,
+                loading:false
+            });
+        });
+
+    }
+
+    componentDidMount () {
+        this.initialization();
+    }
+
+    componentWillUnmount () {
+        this.subscriptionTokens['cfg-'+this.props.wid].map( d => {
+            PubSub.unsubscribe(d.token);
+        });
+        delete this.subscriptionTokens['cfg-'+this.props.wid];
     }
 
     subscriptionHandler = (msg,data) => {
@@ -602,63 +675,94 @@ class WidgetConfigMp extends React.Component {
         }
     }
 
-    componentWillMount () {
-        console.log('me voy a montar');
-        this.refreshConfig();
-    }
+    async refreshConfig () {
+        var shouldUpdate = false;
+        var config = await getWidgetConfig(this.props.wid);
+        var newPids = config.datapoints;
+        var oldPids = this.state.datapoints.map( dp => dp.pid);
+        var promises = newPids.map ( pid => getDatapointConfig(pid));
+        var datapoints = [];
+        Promise.all(promises).then (values => {
+            values.forEach( value => {
+                var dpInfo = {
+                    pid:value.pid,
+                    color:value.color,
+                    datapointname:value.datapointname,
+                    lineThrough: false,
+                };
+                datapoints.push(dpInfo);
+            });
 
-    componentWillUnmount () {
-        this.subscriptionTokens['cfg-'+this.props.wid].map( d => {
-            PubSub.unsubscribe(d.token);
-        });
-        delete this.subscriptionTokens['cfg-'+this.props.wid];
-    }
-
-    refreshConfig () {
-        if (widgetStore._widgetConfig.hasOwnProperty(this.props.wid)) {
-            var widgetConfig=widgetStore._widgetConfig[this.props.wid];
-            var datapoints=[];
-            var tokens = this.subscriptionTokens['cfg-'+this.props.wid];
-            for (var i=0;i<widgetConfig.datapoints.length;i++) {
-                var found = false;
-                var pid = widgetConfig.datapoints[i];
-                for (var j=0; j<tokens.length;j++) {
-                    if (tokens[j].msg == 'datapointConfigUpdate-'+pid) {
-                        found = true;
-                    }
-                }
-                if (!found) {
-                    tokens.push({token:PubSub.subscribe('datapointConfigUpdate-'+pid, this.subscriptionHandler),msg:'datapointConfigUpdate-'+pid});
-                }
-                if (datapointStore._datapointConfig.hasOwnProperty(pid)) {
-                    var datapoint=datapointStore._datapointConfig[pid];
-                    datapoints.push({pid:pid,color:datapoint.color,datapointname:datapoint.datapointname,lineThrough:false});
-                } else {
-                    PubSub.publish('datapointConfigReq',{pid:pid});
-                }
+            var deletedPids = oldPids.filter( pid => newPids.indexOf(pid) < 0);
+            var addedPids = newPids.filter( pid => oldPids.indexOf(pid) < 0);
+            if (deletedPids.length > 0) {
+                shouldUpdate = true;
+                deletedPids.forEach( pid => {
+                    this.subscriptionTokens['cfg-'+this.props.wid].map( d => {
+                        if (d.msg == topics.DATAPOINT_CONFIG_UPDATE(pid)) {
+                            PubSub.unsubscribe(d.token);
+                        }
+                    });
+                });
             }
-            var widgetname = widgetConfig.widgetname;
-            this.setState({datapoints:datapoints, widgetname:widgetname});
-        }
+            if (addedPids.length > 0) {
+                shouldUpdate = true;
+                addedPids.forEach( pid => {
+                    var exists = this.subscriptionTokens['cfg-'+this.props.wid].some( d => {
+                        return d.msg == topics.DATAPOINT_CONFIG_UPDATE(pid);
+                    });
+                    if (!exists) {
+                        this.subscriptionTokens['cfg-'+this.props.wid].push({
+                            token:PubSub.subscribe(
+                                topics.DATAPOINT_CONFIG_UPDATE(pid),
+                                this.subscriptionHandler),
+                            msg:topics.DATAPOINT_CONFIG_UPDATE(pid)
+                        });
+                    }
+                });
+            }
+            if (shouldUpdate == false && config.widgetname != this.state.widgetname) {
+                shouldUpdate = true;
+            } else if (shouldUpdate == false) {
+                var shouldUpdate = datapoints.some( newDP => {
+                    var stateDP = this.state.datapoints.filter( dp => dp.pid == newDP.pid);
+                    if (stateDP.length != 1) {
+                        return true;
+                    } else if (stateDP[0].color != newDP.color) {
+                        return true;
+                    } else if (stateDP[0].datapointname != newDP.datapointname) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                });
+            }
+            if (shouldUpdate) {
+                this.setState({datapoints:datapoints, widgetname:config.widgetname});
+            }
+        });
     }
 
     updateConfig = () => {
+        var shouldUpdate = false;
         var data={wid:this.props.wid};
         var new_widgetname=this.state.newWidgetname;
         if (new_widgetname.length>0 && new_widgetname!=this.state.widgetname) {
+            shouldUpdate = true;
             data.new_widgetname=new_widgetname;
         }
+        var deleteDatapoints=[];
         for (var i=0;i<this.state.datapoints.length;i++) {
-            var deleteDatapoints=[];
             if (this.state.datapoints[i].lineThrough) {
                 deleteDatapoints.push(this.state.datapoints[i].pid);
             }
-            if (deleteDatapoints.length>0) {
-                data.delete_datapoints=deleteDatapoints;
-            }
         }
-        if (Object.keys(data).length>1) {
-            PubSub.publish('modifyWidget',data);
+        if (deleteDatapoints.length>0) {
+            shouldUpdate = true;
+            data.delete_datapoints=deleteDatapoints;
+        }
+        if (shouldUpdate) {
+            PubSub.publish(topics.MODIFY_WIDGET,data);
         }
         this.props.configCallback();
     }
@@ -692,7 +796,7 @@ class WidgetConfigMp extends React.Component {
     }
 
     confirmDelete = () => {
-        PubSub.publish('deleteWidget',{wid:this.props.wid});
+        PubSub.publish(topics.DELETE_WIDGET,{wid:this.props.wid});
         this.setState({deleteModal: false});
         this.props.closeCallback();
     }
@@ -732,8 +836,14 @@ class WidgetConfigMp extends React.Component {
     }
 
     render () {
-        if (this.state.widgetname == '') {
-            return null;
+        if (this.state.loading) {
+            return (
+              <ReactBootstrap.Collapse in={this.props.showConfig}>
+                <div style={styles.banner}>
+                  Loading ...
+                </div>
+              </ReactBootstrap.Collapse>
+            );
         }
         var delete_modal=(
           <ReactBootstrap.Modal show={this.state.deleteModal} onHide={this.cancelDelete}>
@@ -802,12 +912,7 @@ class WidgetConfigMp extends React.Component {
 
 class WidgetDs extends React.Component {
     state = {
-        did: null,
-        contentWidth: null,
-        dsData: null,
-        datasourcename: '',
-        timestamp:0,
-        seq: null,
+        loading: true,
         snapshotTimestamp:0,
         snapshotSeq: null,
         shareModal:false,
@@ -820,43 +925,66 @@ class WidgetDs extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens[props.wid]=[];
-        this.subscriptionTokens[props.wid].push({token:PubSub.subscribe('widgetConfigUpdate-'+this.props.wid, this.subscriptionHandler),msg:'widgetConfigUpdate-'+this.props.wid});
     }
 
-    onClickDatapoint (pid,e) {
-        e.preventDefault();
-        PubSub.publish('loadSlide',{pid:pid});
-    }
+    async initialization () {
+        var newState = {};
+        var widget = await getWidgetConfig (this.props.wid);
+        var dsConfig = getDatasourceConfig(widget.did);
+        var dsData = getDatasourceData(widget.did);
 
-    onDragStartDatapoint (pid,e) {
-        e.stopPropagation();
-        e.dataTransfer.setData('id',pid);
-    }
+        var subscribedTopics = [
+            topics.WIDGET_CONFIG_UPDATE(this.props.wid),
+            topics.WIDGET_INTERVAL_UPDATE(this.props.wid),
+            topics.DATASOURCE_CONFIG_UPDATE(widget.did),
+            topics.DATASOURCE_DATA_UPDATE(widget.did)
+        ];
 
-    subscriptionHandler = (msg,data) => {
-        var msgType = msg.split('-')[0];
-        switch (msgType) {
-            case 'datasourceDataUpdate':
-                this.refreshData();
-                break;
-            case 'datapointConfigUpdate':
-                this.refreshData();
-                break;
-            case 'datasourceConfigUpdate':
-                this.refreshConfig();
-                break;
-            case 'widgetConfigUpdate':
-                this.refreshConfig();
-                break;
-        }
+        newState.contentWidth = ReactDOM.findDOMNode(this).clientWidth;
+
+        Promise.all([dsConfig, dsData]).then( values  => {
+
+            var dpPromises = values[0].pids.map (pid => getDatapointConfig(pid));
+
+            newState.did = values[0].did;
+            newState.datasourcename = values[0].datasourcename;
+            newState.dsData = values[1];
+            newState.timestamp = values[1].ts;
+            newState.seq = values[1].seq;
+            newState.datapoints = [];
+
+            Promise.all(dpPromises).then( dpConfigs => {
+
+                dpConfigs.forEach ( dp => {
+                    subscribedTopics.push(topics.DATAPOINT_CONFIG_UPDATE(dp.pid));
+                    newState.datapoints.push({
+                        pid:dp.pid,
+                        datapointname:dp.datapointname
+                    });
+                });
+
+                newState.datapoints.sort( (a,b) => {
+                    var nameA=a.datapointname.toLowerCase();
+                    var nameB=b.datapointname.toLowerCase();
+                    return ((nameA < nameB) ? -1 : ((nameA > nameB) ? 1 : 0));
+                });
+
+                subscribedTopics.forEach(topic => {
+                    this.subscriptionTokens[this.props.wid].push({
+                        token:PubSub.subscribe(topic,this.subscriptionHandler),
+                        msg:topic
+                    });
+                });
+
+                newState.loading = false;
+                console.log('estado inicial',newState);
+                this.setState(newState);
+            });
+        });
     }
 
     componentDidMount () {
-        if (this.state.contentWidth == null) {
-            var contentWidth = ReactDOM.findDOMNode(this).clientWidth;
-            this.setState({contentWidth:contentWidth});
-        }
-        this.refreshConfig();
+        this.initialization();
     }
 
     componentWillUnmount () {
@@ -875,96 +1003,111 @@ class WidgetDs extends React.Component {
         }
     }
 
+    onClickDatapoint (pid,e) {
+        e.preventDefault();
+        PubSub.publish('loadSlide',{pid:pid});
+    }
+
+    onDragStartDatapoint (pid,e) {
+        e.stopPropagation();
+        e.dataTransfer.setData('id',pid);
+    }
+
+    subscriptionHandler = (msg,data) => {
+        var msgType = msg.split('-')[0];
+        switch (msgType) {
+            case topics.DATASOURCE_DATA_UPDATE():
+                this.refreshData();
+                break;
+            case topics.DATAPOINT_CONFIG_UPDATE():
+                this.refreshData();
+                break;
+            case topics.DATASOURCE_CONFIG_UPDATE():
+                this.refreshConfig();
+                break;
+            case topics.WIDGET_CONFIG_UPDATE():
+                this.refreshConfig();
+                break;
+        }
+    }
+
     downloadContent = () => {
         if (this.state.dsData.content && this.state.dsData.content.length>0) {
             utils.downloadFile(this.state.datasourcename+'.txt',this.state.dsData.content,'text/plain');
         }
     }
 
-    refreshData () {
-        if (this.state.did) {
-            if (datasourceStore._datasourceData.hasOwnProperty(this.state.did)) {
-                var datasourceData=datasourceStore._datasourceData[this.state.did];
-                if (datasourceData.hasOwnProperty('datapoints')) {
-                    var shouldUpdate = false;
-                    for (var i=0;i<datasourceData.datapoints.length;i++) {
-                        var pid=datasourceData.datapoints[i].pid;
-                        var tokens = this.subscriptionTokens[this.props.wid];
-                        var found = false;
-                        for (var i=0;i<tokens.length;i++) {
-                            if (tokens[i].msg == 'datapointConfigUpdate-'+pid) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        if (!found) {
-                            shouldUpdate = true;
-                            tokens.push({token:PubSub.subscribe('datapointConfigUpdate-'+pid, this.subscriptionHandler),msg:'datapointConfigUpdate-'+pid});
-                        }
-                        if (!datapointStore._datapointConfig.hasOwnProperty(pid)) {
-                            shouldUpdate = true;
-                            PubSub.publish('datapointConfigReq',{pid:pid});
-                        }
-                    }
-                }
-                if (!this.state.dsData || (this.state.timestamp < datasourceData.ts)) {
-                    this.setState({dsData:datasourceData, timestamp:datasourceData.ts,seq:datasourceData.seq});
-                } else if (shouldUpdate && this.state.timestamp <= datasourceData.ts) {
-                    this.setState({dsData:datasourceData, timestamp:datasourceData.ts,seq:datasourceData.seq});
-                }
-            }
-        }
-    }
-
-    refreshConfig () {
-        if (!this.state.did) {
-            if (widgetStore._widgetConfig.hasOwnProperty(this.props.wid)) {
-                var widgetConfig = widgetStore._widgetConfig[this.props.wid];
-                var did = widgetConfig.did;
-                var tokens = this.subscriptionTokens[this.props.wid];
-                var configTokenFound = false;
-                var dataTokenFound = false;
-                for (var i=0; i<tokens.length;i++) {
-                    if (tokens[i].msg == 'datasourceConfigUpdate-'+did) {
-                        configTokenFound = true;
-                    } else if (tokens[i].msg == 'datasourceDataUpdate-'+did) {
-                        dataTokenFound = true;
-                    }
-                }
-                if (!configTokenFound) {
-                    tokens.push({token:PubSub.subscribe('datasourceConfigUpdate-'+did, this.subscriptionHandler),msg:'datasourceConfigUpdate-'+did});
-                }
-                if (!dataTokenFound) {
-                    tokens.push({token:PubSub.subscribe('datasourceDataUpdate-'+did, this.subscriptionHandler),msg:'datasourceDataUpdate-'+did});
-                }
-                if (!datasourceStore._datasourceConfig.hasOwnProperty(did)) {
-                    PubSub.publish('datasourceConfigReq',{did:did});
-                }
-                if (this.state.dsData == null) {
-                    PubSub.publish('datasourceDataReq',{did:did});
-                }
-                this.setState({did:did});
-            } else {
-                PubSub.publish('widgetConfigReq',{wid:this.props.wid});
-            }
-        } else if (datasourceStore._datasourceConfig.hasOwnProperty(this.state.did)) {
-            var shouldUpdate=false;
-            var datasourceConfig=datasourceStore._datasourceConfig[this.state.did];
-            if (this.state.datasourcename != datasourceConfig.datasourcename) {
+    async refreshData () {
+        var shouldUpdate = false;
+        var dsData = await getDatasourceData (this.state.did);
+        if (this.state.timestamp < dsData.ts) {
+            shouldUpdate = true;
+        } else if (this.state.timestamp == dsData.ts) {
+            if (this.state.dsData.datapoints.length != dsData.datapoints.length) {
                 shouldUpdate = true;
             }
-            if (shouldUpdate) {
-                this.setState({datasourcename:datasourceConfig.datasourcename});
-            }
-        } else {
-            PubSub.publish('datasourceConfigReq',{did:this.state.did});
+        }
+        if (shouldUpdate) {
+            this.setState({dsData:dsData, timestamp:dsData.ts,seq:dsData.seq});
         }
     }
 
-    getDsInfo (timestamp) {
-        if (typeof timestamp === 'number') {
+    async refreshConfig () {
+        var shouldUpdate = false;
+        var dsConfig = await getDatasourceConfig(this.state.did);
+        if (this.state.datasourcename != dsConfig.datasourcename) {
+            shouldUpdate = true;
+        }
+        var deletedPids = this.state.datapoints.filter( dp => dsConfig.pids.indexOf(dp.pid) < 0);
+        var newPids=dsConfig.pids.filter(pid => !this.state.datapoints.some(dp => dp.pid == pid));
+        var newDatapoints = this.state.datapoints;
+        if (deletedPids.length > 0) {
+            shouldUpdate = true;
+            deletedPids.forEach( pid => {
+                this.subscriptionTokens[this.props.wid].map( d => {
+                    if (d.msg == topics.DATAPOINT_CONFIG_UPDATE(pid)) {
+                        PubSub.unsubscribe(d.token);
+                    }
+                });
+                newDatapoints = newDatapoints.filter( dp => dp.pid != pid);
+            });
+        }
+        if (newPids.length > 0) {
+            shouldUpdate = true;
+            for (i=0,j=newPids.length;i<j;i++) {
+                var pid = newPids[i];
+                var exists = this.subscriptiontokens[this.props.wid].some ( d => {
+                    return d.msg == topics.DATAPOINT_CONFIG_UPDATE(pid);
+                });
+                if (!exists) {
+                    this.subscriptionTokens[this.props.wid].push({
+                        token:PubSub.subscribe(
+                            topics.DATAPOINT_CONFIG_UPDATE(pid),
+                            this.subscriptionHandler),
+                        msg:topics.DATAPOINT_CONFIG_UPDATE(pid)
+                    });
+                }
+                var dpConfig = await getDatapointConfig(pid);
+                newDatapoints.push({pid:dpConfig.pid, datapointname:dpConfig.datapointname});
+            }
+        }
+        if (shouldUpdate) {
+            newDatapoints.sort( (a,b) => {
+                var nameA=a.datapointname.toLowerCase();
+                var nameB=b.datapointname.toLowerCase();
+                return ((nameA < nameB) ? -1 : ((nameA > nameB) ? 1 : 0));
+            });
+            this.setState({
+                datasourcename:datasourcename,
+                datapoints: newDatapoints,
+            });
+        }
+    }
+
+    getDsInfo () {
+        if (this.state.timestamp) {
             var dateFormat = d3.timeFormat("%Y/%m/%d - %H:%M:%S");
-            var date = new Date(timestamp*1000);
+            var date = new Date(this.state.timestamp*1000);
             var dateText=dateFormat(date);
             return (
               <div style={{"textAlign":"center"}}>
@@ -989,7 +1132,8 @@ class WidgetDs extends React.Component {
         }
     }
 
-    getFontClass (dsData) {
+    getFontClass () {
+        var dsData = this.state.dsData;
         if (!dsData || this.state.contentWidth == null) {
             return 'font-normal';
         }
@@ -997,81 +1141,83 @@ class WidgetDs extends React.Component {
         var contentWidth = this.state.contentWidth;
         var normalLength = contentWidth / 8;
         var lines = dsData.content.split(newLineRegex);
-        var meanLineSize=d3.mean(lines, function (d) {return d.length > 0 ? d.length : normalLength});
+        var meanLineSize=d3.mean(lines, d => d.length > 0 ? d.length : normalLength);
         var fontClass = meanLineSize * 10 < contentWidth ? 'font-large' : meanLineSize * 6 > contentWidth ? 'font-small' : 'font-normal';
         return fontClass;
     }
 
-    generateHtmlContent (dsData) {
+    generateHtmlContent () {
+        var dsData = this.state.dsData;
+        var dsDatapoints = this.state.datapoints;
         var elements=[];
         if (!dsData) {
             return elements;
         }
+        var can_edit = true;
+        if (this.state.datasourcename.split(':').length > 1) {
+            var dsVars = [];
+            can_edit = false;
+            dsData.datapoints.forEach( dp => {
+                dsData.variables.forEach ( v => {
+                    if (v[0] == dp.index) {
+                        dsVars.push(v);
+                    }
+                });
+            });
+            dsVars.sort( (a,b) => a[0]-b[0]);
+        } else {
+            dsVars = dsData.variables;
+        }
         var numElement = 0;
         var cursorPosition=0;
         var newLineRegex=/(?:\r\n|\r|\n)/g;
-        var datasourcePids=[];
-        if (this.state.did && datasourceStore._datasourceConfig.hasOwnProperty(this.state.did)) {
-            var datasourceConfig=datasourceStore._datasourceConfig[this.state.did];
-            if (datasourceConfig.hasOwnProperty('pids')) {
-                for (var i=0;i<datasourceConfig.pids.length;i++) {
-                    if (datapointStore._datapointConfig.hasOwnProperty(datasourceConfig.pids[i])) {
-                        var datapointname=datapointStore._datapointConfig[datasourceConfig.pids[i]].datapointname;
-                        datasourcePids.push({pid:datasourceConfig.pids[i],datapointname:datapointname});
-                    }
-                }
-            }
-        }
-        datasourcePids.sort( (a,b) => {
-            var nameA=a.datapointname.toLowerCase();
-            var nameB=b.datapointname.toLowerCase();
-            return ((nameA < nameB) ? -1 : ((nameA > nameB) ? 1 : 0));
-        });
-        for (var i=0;i<dsData.variables.length;i++) {
-            var position=dsData.variables[i][0];
-            var length=dsData.variables[i][1];
-            var dsSubContent=dsData.content.substr(cursorPosition,position-cursorPosition);
-            var start=0;
-            var match = newLineRegex.exec(dsSubContent);
+        var dsSubContent, start, text, match, datapointname, position, length;
+        dsVars.forEach( v => {
+            position=v[0];
+            length=v[1];
+            dsSubContent=dsData.content.substr(cursorPosition,position-cursorPosition);
+            start=0;
+            match = newLineRegex.exec(dsSubContent);
             while(match != null) {
-                var text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
+                text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
                 elements.push({ne:numElement++,type:'text',data:text});
                 elements.push({ne:numElement++,type:'nl'});
                 start=match.index+match.length-1;
                 match = newLineRegex.exec(dsSubContent);
             }
             if (start<position) {
-                var text=dsSubContent.substr(start,position-start).replace(/ /g, '\u00a0');
+                text=dsSubContent.substr(start,position-start).replace(/ /g, '\u00a0');
                 elements.push({ne:numElement++,type:'text',data:text});
             }
-            var datapointFound=false;
-            for (var j=0;j<dsData.datapoints.length;j++) {
-                if (dsData.datapoints[j].index == dsData.variables[i][0]) {
-                    var text=dsData.content.substr(position,length);
-                    if (datapointStore._datapointConfig.hasOwnProperty(dsData.datapoints[j].pid)) {
-                        var datapointname=datapointStore._datapointConfig[dsData.datapoints[j].pid].datapointname.split(datasourceConfig.datasourcename);
-                        if (datapointname.length == 2) {
-                            datapointname = datapointname[1].slice(-20);
-                            if (datapointname.length == 20) {
-                                datapointname = "..."+datapointname;
-                            }
+            var datapointFound=dsData.datapoints.some( dp => {
+                if (dp.index == position) {
+                    text=dsData.content.substr(position,length);
+                    datapointname = null;
+                    dsDatapoints.forEach( state_dp => {
+                        if (state_dp.pid == dp.pid) {
+                            datapointname = state_dp.datapointname.split(this.state.datasourcename);
+                        }
+                    });
+                    if (datapointname) {
+                        datapointname = datapointname[1].slice(-20);
+                        if (datapointname.length == 20) {
+                            datapointname = "..."+datapointname;
                         }
                     } else {
-                        var datapointname='...';
+                        datapointname='...';
                     }
-                    elements.push({ne:numElement++,type:'datapoint',pid:dsData.datapoints[j].pid,p:position,l:length,data:text,datapointname:datapointname});
-                    datapointFound=true;
-                    break;
+                    elements.push({ne:numElement++,type:'datapoint',pid:dp.pid,p:position,l:length,data:text,datapointname:datapointname});
+                    return true;
                 }
-            }
-            if (datapointFound == false) {
-                var text=dsData.content.substr(position,length);
-                elements.push({ne:numElement++, type:'variable',data:text,position:position,length:length,datapoints:datasourcePids});
+            });
+            if (datapointFound == false && can_edit == true) {
+                text=dsData.content.substr(position,length);
+                elements.push({ne:numElement++, type:'variable',data:text,position:position,length:length});
             } else {
                 datapointFound = false;
             }
             cursorPosition=position+length;
-        }
+        });
         if (cursorPosition<dsData.content.length) {
             dsSubContent=dsData.content.substr(cursorPosition,dsData.content.length-cursorPosition);
             start=0;
@@ -1095,23 +1241,37 @@ class WidgetDs extends React.Component {
 
     shareSnapshot = () => {
         var user_list=this.users.value.split(/[\s]+/);
-        PubSub.publish('newWidgetDsSnapshot',{seq:this.state.snapshotSeq,user_list:user_list,wid:this.props.wid});
+        var payload = {seq:this.state.snapshotSeq,user_list:user_list,wid:this.props.wid};
+        PubSub.publish(topics.NEW_WIDGET_DS_SNAPSHOT,payload);
         this.setState({shareModal:false});
     }
 
     identifyVariable = (position, length, datapointname) => {
-        var data={p:position,l:length,seq:this.state.seq,did:this.state.did,datapointname:datapointname};
-        PubSub.publish('monitorDatapoint',data);
+        var payload ={
+            p:position,
+            l:length,
+            seq:this.state.seq,
+            did:this.state.did,
+            datapointname:datapointname
+        };
+        PubSub.publish(topics.MONITOR_DATAPOINT,payload);
     }
 
     associateExistingDatapoint = (position, length, pid) => {
-        var data={p:position,l:length,seq:this.state.seq,pid:pid};
-        PubSub.publish('markPositiveVar',data);
+        var payload = {p:position,l:length,seq:this.state.seq,pid:pid};
+        PubSub.publish(topics.MARK_POSITIVE_VAR,payload);
     }
 
     render () {
-        var elements=this.generateHtmlContent(this.state.dsData);
-        var textClass=this.getFontClass(this.state.dsData);
+        if (this.state.loading) {
+            return (
+              <div style={styles.banner}>
+                Loading...
+              </div>
+            );
+        }
+        var elements=this.generateHtmlContent();
+        var textClass=this.getFontClass();
         var element_nodes=elements.map( element => {
             if (element.type == 'text') {
                 return <span key={element.ne}>{element.data}</span>;
@@ -1128,11 +1288,11 @@ class WidgetDs extends React.Component {
                 );
             } else if (element.type == 'variable') {
                 return (
-                  <WidgetDsVariable key={element.ne} content={element.data} position={element.position} length={element.length} identifyVariableCallback={this.identifyVariable} datapoints={element.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />
+                  <WidgetDsVariable key={element.ne} content={element.data} position={element.position} length={element.length} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />
                 );
             }
         });
-        var info_node=this.getDsInfo(this.state.timestamp);
+        var info_node=this.getDsInfo();
         var share_modal=(
           <ReactBootstrap.Modal show={this.state.shareModal} onHide={this.cancelSnapshot}>
             <ReactBootstrap.Modal.Header closeButton={true}>
@@ -1165,12 +1325,7 @@ class WidgetDs extends React.Component {
 
 class WidgetDp extends React.Component {
     state = {
-        interval: {its:null ,ets: null},
-        pid: null,
-        color: null,
-        datapointname: null,
-        data: [],
-        summary: {},
+        loading: true,
         live: true,
         activeVis: 0,
         shareModal:false,
@@ -1185,16 +1340,52 @@ class WidgetDp extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens[props.wid]=[];
-        this.subscriptionTokens[props.wid].push({token:PubSub.subscribe('intervalUpdate-'+props.wid, this.subscriptionHandler),msg:'intervalUpdate-'+props.wid});
-        this.subscriptionTokens[props.wid].push({token:PubSub.subscribe('widgetConfigUpdate-'+props.wid, this.subscriptionHandler),msg:'widgetConfigUpdate-'+props.wid});
+    }
+
+    async initialization () {
+        var config = await getWidgetConfig(this.props.wid);
+        var dpConfig = getDatapointConfig(config.pid);
+        var dpData = getDatapointData(config.pid);
+
+        var subscribedTopics = [
+            topics.WIDGET_CONFIG_UPDATE(this.props.wid),
+            topics.WIDGET_INTERVAL_UPDATE(this.props.wid),
+            topics.DATAPOINT_CONFIG_UPDATE(config.pid),
+            topics.DATAPOINT_DATA_UPDATE(config.pid)
+        ];
+
+        Promise.all([dpConfig,dpData]).then( values => {
+
+            subscribedTopics.forEach(topic => {
+                this.subscriptionTokens[this.props.wid].push({
+                    token:PubSub.subscribe(topic,this.subscriptionHandler),
+                    msg:topic
+                });
+            });
+
+            var nextTs = values[1].data.map( d => d.ts);
+            var ets = Math.max.apply(null,nextTs);
+            var its = Math.min.apply(null,nextTs);
+
+            var newState = {
+                interval:{its:its,ets:ets},
+                pid:values[0].pid,
+                datapointname: values[0].datapointname,
+                color: values[0].color,
+                data: values[1].data,
+                loading:false
+            }
+            console.log('estado inicial',newState);
+            this.setState(newState);
+        });
     }
 
     componentDidMount () {
-        this.refreshConfig();
+        this.initialization();
     }
 
     componentWillUnmount () {
-        this.subscriptionTokens[this.props.wid].map( d => {
+        this.subscriptionTokens[this.props.wid].forEach( d => {
             PubSub.unsubscribe(d.token);
         });
         delete this.subscriptionTokens[this.props.wid];
@@ -1206,6 +1397,24 @@ class WidgetDp extends React.Component {
         } else if (nextProps.downloadCounter>this.state.downloadCounter) {
             this.downloadContent();
             this.setState({downloadCounter:nextProps.downloadCounter});
+        }
+    }
+
+    subscriptionHandler = (msg,data) => {
+        var msgType = msg.split('-')[0];
+        switch (msgType) {
+            case topics.DATAPOINT_DATA_UPDATE():
+                this.refreshData(data.interval);
+                break;
+            case topics.DATAPOINT_CONFIG_UPDATE():
+                this.refreshConfig();
+                break;
+            case topics.WIDGET_CONFIG_UPDATE():
+                this.refreshConfig();
+                break;
+            case topics.WIDGET_INTERVAL_UPDATE():
+                this.newIntervalCallback(data.interval);
+                break;
         }
     }
 
@@ -1232,23 +1441,21 @@ class WidgetDp extends React.Component {
     newIntervalCallback = (interval) => {
         var now=new Date().getTime()/1000;
         var live = this.state.live;
-        if (interval.hasOwnProperty('its') && interval.hasOwnProperty('ets')) {
-            if (interval.its == interval.ets) {
-                interval.its=interval.ets-3600;
-            }
-            if (Math.abs(this.state.interval.ets-interval.ets)>1) {
-                if (interval.ets < now-30) {
-                    live = false;
-                } else {
-                    live = true;
-                }
-            }
-            if (interval.ets > now) {
-                interval.ets = now;
-            }
-            PubSub.publish('datapointDataReq',{pid:this.state.pid,interval:interval});
-            this.setState({live:live,interval:interval});
+        if (interval.its == interval.ets) {
+            interval.its=interval.ets-3600;
         }
+        if (Math.abs(this.state.interval.ets-interval.ets)>1) {
+            if (interval.ets < now-30) {
+                live = false;
+            } else {
+                live = true;
+            }
+        }
+        if (interval.ets > now) {
+            interval.ets = now;
+        }
+        var newData = getDatapointData(this.state.pid, interval);
+        newData.then( dpData => this.setState({live:live,interval:interval, data:dpData.data}));
     }
 
     snapshotIntervalCallback = (interval) => {
@@ -1264,103 +1471,62 @@ class WidgetDp extends React.Component {
         }
     }
 
-    subscriptionHandler = (msg,data) => {
-        var msgType = msg.split('-')[0];
-        switch (msgType) {
-            case 'datapointDataUpdate':
-                if (this.state.interval.its == null || this.state.interval.ets == null) {
-                    this.refreshData(data.interval);
-                } else if (this.state.live == true && data.interval.ets > this.state.interval.ets) {
-                        var elapsedTs=data.interval.ets-this.state.interval.ets;
-                        var newInterval={its:this.state.interval.its+elapsedTs, ets: data.interval.ets};
-                        this.refreshData(newInterval);
-                } else if ((this.state.interval.its <= data.interval.its && data.interval.its <= this.state.interval.ets) ||
-                           (this.state.interval.its <= data.interval.ets && data.interval.ets <= this.state.interval.ets)) {
-                    this.refreshData(this.state.interval);
-                }
-                break;
-            case 'datapointConfigUpdate':
-                this.refreshConfig();
-                break;
-            case 'widgetConfigUpdate':
-                this.refreshConfig();
-                break;
-            case 'intervalUpdate':
-                this.newIntervalCallback(data.interval);
-                break;
+    async refreshConfig () {
+        var shouldUpdate = false;
+        var dpConfig = await getDatapointConfig(this.state.pid);
+        if (this.state.datapointname != dpConfig.datapointname) {
+            shouldUpdate = true;
+        } else if (this.state.color != dpConfig.color) {
+            shouldUpdate = true;
+        }
+        if (shouldUpdate) {
+            this.setState({datapointname:dpConfig.datapointname,color:dpConfig.color});
         }
     }
 
-    refreshConfig () {
-        if (this.state.pid) {
-            if (datapointStore._datapointConfig.hasOwnProperty(this.state.pid)) {
-                var datapointConfig=datapointStore._datapointConfig[this.state.pid];
-                var shouldUpdate=false;
-                if (this.state.datapointname != datapointConfig.datapointname) {
+    async refreshData (interval) {
+        var shouldUpdate = false;
+        if ((this.state.live && interval.ets > this.state.interval.ets) ||
+            (this.state.interval.ets >= interval.ets && this.state.interval.its <= interval.ets) ||
+            (this.state.interval.its <= interval.its && this.state.interval.ets >= interval.its)) {
+            var newData = await getDatapointData(this.state.pid, interval);
+            //for new or different samples
+            shouldUpdate = newData.data.some( d => {
+                var haveIt = this.state.data.some ( e => e.ts == d.ts && e.value == d.value);
+                return !haveIt;
+            });
+            //for deleted samples
+            if (!shouldUpdate) {
+                var intervalData = this.state.data.filter( d => d.ts >= interval.its && d.ts <= interval.ets);
+                if (intervalData.length != newData.data.length) {
                     shouldUpdate = true;
-                }
-                if (this.state.color != datapointConfig.color) {
-                    shouldUpdate = true;
-                }
-                if (shouldUpdate) {
-                    this.setState({datapointname:datapointConfig.datapointname,color:datapointConfig.color});
                 }
             }
-        } else {
-            if (widgetStore._widgetConfig.hasOwnProperty(this.props.wid)) {
-                var widgetConfig = widgetStore._widgetConfig[this.props.wid];
-                var pid = widgetConfig.pid;
-                var tokens = this.subscriptionTokens[this.props.wid];
-                var configTokenFound = false;
-                var dataTokenFound = false;
-                for (var i=0; i<tokens.length;i++) {
-                    if (tokens[i].msg == 'datapointConfigUpdate-'+pid) {
-                        configTokenFound = true;
-                    } else if (tokens[i].msg == 'datapointDataUpdate-'+pid) {
-                        dataTokenFound = true;
-                    }
-                }
-                if (!configTokenFound) {
-                    tokens.push({token:PubSub.subscribe('datapointConfigUpdate-'+pid, this.subscriptionHandler),msg:'datapointConfigUpdate-'+pid});
-                }
-                if (!dataTokenFound) {
-                    tokens.push({token:PubSub.subscribe('datapointDataUpdate-'+pid, this.subscriptionHandler),msg:'datapointDataUpdate-'+pid});
-                }
-                if (this.state.datapointname == null) {
-                    PubSub.publish('datapointConfigReq',{pid:pid});
-                }
-                if (this.state.data.length == 0) {
-                    PubSub.publish('datapointDataReq',{pid:pid});
-                }
-                this.setState({pid:pid});
+        }
+        if (shouldUpdate) {
+            var newInt;
+            var intervalLength = this.state.interval.ets - this.state.interval.its;
+            var newTs = newData.data.map(d => d.ts);
+            var ets = Math.max.apply(null, newTs);
+            if (ets > this.state.interval.ets) {
+                newInt = {ets:ets,its:ets-intervalLength};
             } else {
-                PubSub.publish('widgetConfigReq',{wid:this.props.wid});
+                newInt = this.state.interval;
             }
+            newData = await getDatapointData(this.state.pid, newInt);
+            this.setState({data: newData.data, interval:newInterval});
         }
     }
 
-    refreshData (interval) {
-        console.log('refreshData',interval);
-        if (this.state.pid) {
-            var newData=getIntervalData(this.state.pid, interval);
-            var newSummary=this.getDataSummary(newData);
-            this.setState({interval: interval, data: newData, summary:newSummary});
-        }
-    }
-
-    getDataSummary (data) {
-        var totalSamples=data.length;
-        if (totalSamples>0) {
-            var maxValue=Math.max.apply(Math,data.map(function(o){return o.value;}));
-            var minValue=Math.min.apply(Math,data.map(function(o){return o.value;}));
-            var sumValues=0;
-            var meanValue=0;
-            for (var j=0;j<data.length;j++) {
-                sumValues+=data[j].value;
-            }
-            if (totalSamples>0) {
-                meanValue=sumValues/totalSamples;
-            }
+    getDataSummary () {
+        var data = this.state.data;
+        var numSamples=data.length;
+        if (numSamples>0) {
+            var allValues = data.map( d => d.value);
+            var maxValue=Math.max.apply(null, allValues);
+            var minValue=Math.min.apply(null, allValues);
+            var sumValues = allValues.reduce((a, b) => a + b, 0);
+            var meanValue=sumValues/numSamples;
             if ((maxValue % 1) != 0 || (minValue % 1) != 0) {
                 if (typeof maxValue % 1 == 'number' && maxValue % 1 != 0) {
                     var numDecimalsMaxValue=maxValue.toString().split('.')[1].length;
@@ -1377,11 +1543,34 @@ class WidgetDp extends React.Component {
                 var numDecimals=2;
             }
             meanValue=meanValue.toFixed(numDecimals);
-            var summary={max:d3.format(",")(maxValue),min:d3.format(",")(minValue),mean:d3.format(",")(meanValue)};
+            var summary={
+                max:d3.format(",")(maxValue),
+                min:d3.format(",")(minValue),
+                mean:d3.format(",")(meanValue)
+            };
         } else {
-            var summary={max:0,min:0,mean:0};
+            var summary={
+                max:'-',
+                min:'-',
+                mean:'-'
+            };
         }
-        return summary;
+        return (
+          <table className="table-condensed">
+            <tbody>
+              <tr>
+                <th>max</th>
+                <th>min</th>
+                <th>mean</th>
+              </tr>
+              <tr>
+                <td>{summary.max}</td>
+                <td>{summary.min}</td>
+                <td>{summary.mean}</td>
+              </tr>
+            </tbody>
+          </table>
+        );
     }
 
     cancelSnapshot = () => {
@@ -1395,24 +1584,27 @@ class WidgetDp extends React.Component {
     }
 
     render () {
-        if (this.state.pid == null || this.state.datapointname == null ) {
-            return null;
+        if (this.state.loading) {
+            return (
+              <div style={styles.banner}>
+                Loading...
+              </div>
+            );
         }
-        var summary = (
-          <tr>
-            <td>{this.state.summary.max}</td>
-            <td>{this.state.summary.min}</td>
-            <td>{this.state.summary.mean}</td>
-          </tr>
-        );
-        var data=[{pid:this.state.pid,color:this.state.color,datapointname:this.state.datapointname,data:this.state.data}];
+        var summary = this.getDataSummary();
+        var data=[{
+            pid:this.state.pid,
+            color:this.state.color,
+            datapointname:this.state.datapointname,
+            data:this.state.data
+        }];
         var share_modal=(
           <ReactBootstrap.Modal show={this.state.shareModal} onHide={this.cancelSnapshot}>
             <ReactBootstrap.Modal.Header closeButton={true}>
               <ReactBootstrap.Modal.Title>Share snapshot</ReactBootstrap.Modal.Title>
             </ReactBootstrap.Modal.Header>
             <ReactBootstrap.Modal.Body>
-              <ReactBootstrap.FormControl inputRef={(input) => { this.users = input; }} type="textarea" label="Select Users" placeholder="type users separated by space" />
+              <ReactBootstrap.FormControl inputRef={(input) => { this.users = input; }} type="textarea" label="Select Users" placeholder="type users separated by spaces" />
             </ReactBootstrap.Modal.Body>
             <ReactBootstrap.Modal.Footer>
               <ReactBootstrap.Button bsStyle="default" onClick={this.cancelSnapshot}>Cancel</ReactBootstrap.Button>
@@ -1425,19 +1617,10 @@ class WidgetDp extends React.Component {
         return (
           <div>
             <div className="dp-stats">
-              <table className="table-condensed">
-                <tbody>
-                  <tr>
-                    <th>max</th>
-                    <th>min</th>
-                    <th>mean</th>
-                  </tr>
-                  {summary}
-                </tbody>
-              </table>
+              {summary}
             </div>
             <div className="row visual-bar">
-             <div className="col-md-5 text-center">
+              <div className="col-md-5 text-center">
                 <ReactBootstrap.ButtonGroup bsSize="xsmall">
                   <ReactBootstrap.Button id="0" active={this.state.activeVis == 0 ? true : false} onClick={this.selectVis}>chart</ReactBootstrap.Button>
                   <ReactBootstrap.Button id="1" active={this.state.activeVis == 1 ? true : false} onClick={this.selectVis}>histogram</ReactBootstrap.Button>
@@ -1449,7 +1632,7 @@ class WidgetDp extends React.Component {
             </div>
             <div className="row">
               <div className="col-md-12">{visContent}</div>
-            </div> 
+            </div>
             <div>{share_modal}</div>
           </div>
         );
@@ -1458,11 +1641,7 @@ class WidgetDp extends React.Component {
 
 class WidgetMp extends React.Component {
     state = {
-        interval: {its:null ,ets:null},
-        pids: null,
-        widgetname: "",
-        data: {},
-        config: {},
+        loading: true,
         live: true,
         activeVis: 0,
         shareModal:false,
@@ -1477,32 +1656,117 @@ class WidgetMp extends React.Component {
     constructor (props) {
         super(props);
         this.subscriptionTokens[props.wid]=[];
-        this.subscriptionTokens[props.wid].push({token:PubSub.subscribe('intervalUpdate-'+props.wid, this.subscriptionHandler),msg:'intervalUpdate-'+props.wid});
-        this.subscriptionTokens[props.wid].push({token:PubSub.subscribe('widgetConfigUpdate-'+props.wid, this.subscriptionHandler),msg:'widgetConfigUpdate-'+props.wid});
+    }
+
+    async initialization () {
+        var newState = {};
+        var config = await getWidgetConfig(this.props.wid);
+        var dpPromises = [];
+
+        var subscribedTopics = [
+            topics.WIDGET_CONFIG_UPDATE(this.props.wid),
+            topics.WIDGET_INTERVAL_UPDATE(this.props.wid),
+        ];
+
+        newState.widgetname = config.widgetname;
+        newState.config = {};
+        newState.data = {};
+        newState.interval = {its:null, ets:null};
+
+        config.datapoints.forEach( pid => {
+            dpPromises.push(getDatapointConfig(pid));
+            dpPromises.push(getDatapointData(pid));
+            subscribedTopics.push(topics.DATAPOINT_CONFIG_UPDATE(pid));
+            subscribedTopics.push(topics.DATAPOINT_DATA_UPDATE(pid));
+            newState.config[pid]={};
+            newState.data[pid]={};
+        });
+
+
+        Promise.all(dpPromises).then( values => {
+            var etss = [];
+            var itss = [];
+            values.forEach( value => {
+                if (value.hasOwnProperty('data') ) {
+                    newState.data[value.pid]=value.data;
+                    var dpTs = value.data.map(d => d.ts);
+                    etss.push(Math.max.apply(null, dpTs));
+                    itss.push(Math.min.apply(null, dpTs));
+                } else {
+                    newState.config[value.pid].datapointname = value.datapointname;
+                    newState.config[value.pid].color = value.color;
+                }
+            });
+            if (etss.length > 0) {
+                newState.interval.ets = Math.max.apply(null, etss);
+                var sumItss = itss.reduce((a, b) => a + b, 0);
+                newState.interval.its = sumItss/itss.length;
+            }
+
+            subscribedTopics.forEach(topic => {
+                this.subscriptionTokens[this.props.wid].push({
+                    token:PubSub.subscribe(topic,this.subscriptionHandler),
+                    msg:topic
+                });
+            });
+
+            newState.loading = false;
+
+            console.log('estado inicial',newState);
+            this.setState(newState);
+        });
+    }
+
+    componentDidMount () {
+        this.initialization();
     }
 
     componentWillUnmount () {
-        this.subscriptionTokens[this.props.wid].forEach ( d => {
+        this.subscriptionTokens[this.props.wid].forEach( d => {
             PubSub.unsubscribe(d.token);
         });
         delete this.subscriptionTokens[this.props.wid];
     }
 
-    componentWillMount () {
-        this.refreshConfig();
-    }
-
     componentWillReceiveProps (nextProps) {
         if (nextProps.shareCounter>this.state.shareCounter) {
-            if (this.state.pids == null || this.state.pids.length == 0) {
-                this.props.barMessageCallback({message:{type:'danger',message:'No datapoints in graph'},messageTime:(new Date).getTime()});
+            if (Object.keys(this.state.config).length == 0) {
+                this.props.barMessageCallback({
+                    message:{type:'danger',message:'No datapoints in graph'},
+                    messageTime:(new Date).getTime()
+                });
                 this.setState({shareModal:false,shareCounter:nextProps.shareCounter});
             } else {
-                this.setState({shareModal:true,shareCounter:nextProps.shareCounter, snapshotInterval:this.state.interval, livePrevious:this.state.live, live: false});
+                this.setState({
+                    shareModal:true,
+                    shareCounter:nextProps.shareCounter,
+                    snapshotInterval:this.state.interval,
+                    livePrevious:this.state.live,
+                    live: false
+                });
             }
         } else if (nextProps.downloadCounter>this.state.downloadCounter) {
             this.downloadContent();
             this.setState({downloadCounter:nextProps.downloadCounter});
+        }
+    }
+
+    subscriptionHandler = (msg,data) => {
+        var msgType=msg.split('-')[0];
+        switch (msgType) {
+            case topics.DATAPOINT_DATA_UPDATE():
+                var pid=msg.split('-')[1];
+                this.refreshData(data.interval, pid);
+                break;
+            case topics.DATAPOINT_CONFIG_UPDATE():
+                this.refreshConfig();
+                break;
+            case topics.WIDGET_INTERVAL_UPDATE():
+                this.newIntervalCallback(data.interval);
+                break;
+            case topics.WIDGET_CONFIG_UPDATE():
+                this.refreshConfig();
+                break;
         }
     }
 
@@ -1517,23 +1781,25 @@ class WidgetMp extends React.Component {
     newIntervalCallback = (interval) => {
         var now=new Date().getTime()/1000;
         var live = this.state.live;
-        if (interval.hasOwnProperty('its') && interval.hasOwnProperty('ets')) {
-            if (Math.abs(this.state.interval.ets-interval.ets)>1) {
-                if (interval.ets < now-30) {
-                    var live = false;
-                } else {
-                    var live = true;
-                }
-            }
-            if (interval.ets > now) {
-                interval.ets = now;
-            }
-            for (var i=0;i<this.state.pids.length;i++) {
-                PubSub.publish('datapointDataReq',{pid:this.state.pids[i],interval:interval});
-            }
-            this.setState({interval:interval, live:live});
-            this.refreshData(interval);
+        if (interval.its == interval.ets) {
+            interval.its=interval.ets-3600;
         }
+        if (Math.abs(this.state.interval.ets-interval.ets)>1) {
+            if (interval.ets < now-30) {
+                var live = false;
+            } else {
+                var live = true;
+            }
+        }
+        if (interval.ets > now) {
+            interval.ets = now;
+        }
+        var dpProm = Object.keys(this.state.config).map( pid => getDatapointData(pid, interval));
+        Promise.all(dpProm).then( values => {
+            var data = {};
+            values.forEach(value => data[value.pid]=value.data);
+            this.setState({interval:interval, data:data, live:live});
+        });
     }
 
     snapshotIntervalCallback = (interval) => {
@@ -1550,7 +1816,7 @@ class WidgetMp extends React.Component {
     }
 
     downloadContent = () => {
-        if (!(this.state.pids == null) && this.state.pids.length>0) {
+        if (Object.keys(this.state.config).length != 0) {
             var x={};
             var x_final=[];
             var y_final=[];
@@ -1591,88 +1857,219 @@ class WidgetMp extends React.Component {
         }
     }
 
-    subscriptionHandler = (msg,data) => {
-        var msgType=msg.split('-')[0];
-        switch (msgType) {
-            case 'datapointDataUpdate':
-                var pid=msg.split('-')[1];
-                if (this.state.interval.its == null || this.state.interval.ets == null) {
-                    this.refreshData(data.interval, pid);
-                } else if (this.state.live == true && data.interval.ets > this.state.interval.ets) {
-                    var elapsedTs=data.interval.ets-this.state.interval.ets;
-                    var newInterval={its:this.state.interval.its+elapsedTs, ets: data.interval.ets};
-                    this.refreshData(newInterval, pid);
-                } else if ((this.state.interval.its <= data.interval.its && data.interval.its <= this.state.interval.ets) ||
-                           (this.state.interval.its <= data.interval.ets && data.interval.ets <= this.state.interval.ets)) {
-                    this.refreshData(this.state.interval, pid);
-                }
-                break;
-            case 'datapointConfigUpdate':
-                this.refreshConfig();
-                break;
-            case 'intervalUpdate':
-                this.newIntervalCallback(data.interval);
-                break;
-            case 'widgetConfigUpdate':
-                this.refreshConfig();
-                break;
-        }
-    }
+    async refreshConfig () {
+        console.log('inicio refreshconfig');
+        var shouldUpdate = false;
+        var data = this.state.data;
+        var newConfig = {};
+        var interval = this.state.interval;
+        var newSubscriptions = [];
+        var wgConfig = await getWidgetConfig(this.props.wid);
 
-    refreshConfig () {
-        if (widgetStore._widgetConfig.hasOwnProperty(this.props.wid)) {
-            var widgetConfig=widgetStore._widgetConfig[this.props.wid];
-            var datapoints={};
-            var tokens = this.subscriptionTokens[this.props.wid];
-            var data = this.state.data;
-            for (var i=0;i<widgetConfig.datapoints.length;i++) {
-                var dataFound = false;
-                var configFound = false;
-                var pid = widgetConfig.datapoints[i];
-                for (var j=0; j<tokens.length;j++) {
-                    if (tokens[j].msg == 'datapointConfigUpdate-'+pid) {
-                        configFound = true;
-                    } else if (tokens[j].msg == 'datapointDataUpdate-'+pid) {
-                        dataFound = true;
+        var newPids = wgConfig.datapoints.sort((a,b) => a-b);
+        var dpProm = newPids.map( pid => getDatapointConfig(pid));
+
+        var oldPids = Object.keys(this.state.config).sort( (a,b) => a-b);
+        var deletedPids = oldPids.filter( pid => newPids.indexOf(pid) < 0);
+        var addedPids = newPids.filter( pid => oldPids.indexOf(pid) < 0);
+        if (deletedPids.length > 0) {
+            shouldUpdate = true;
+            deletedPids.forEach( pid => {
+                delete data[pid];
+                var pidTopics = [topics.DATAPOINT_DATA_UPDATE(pid),topics.DATAPOINT_CONFIG_UPDATE(pid)];
+                this.subscriptionTokens[this.props.wid].map( d => {
+                    if (pidTopics.includes(d.msg)) {
+                        PubSub.unsubscribe(d.token);
                     }
-                }
-                if (!configFound) {
-                    tokens.push({token:PubSub.subscribe('datapointConfigUpdate-'+pid, this.subscriptionHandler),msg:'datapointConfigUpdate-'+pid});
-                }
-                if (!dataFound) {
-                    tokens.push({token:PubSub.subscribe('datapointDataUpdate-'+pid, this.subscriptionHandler),msg:'datapointDataUpdate-'+pid});
-                }
-                if (datapointStore._datapointConfig.hasOwnProperty(pid)) {
-                    var datapoint=datapointStore._datapointConfig[pid];
-                    datapoints[pid]={pid:pid,color:datapoint.color,datapointname:datapoint.datapointname};
+                });
+            });
+        }
+        if (addedPids.length > 0) {
+            shouldUpdate = true;
+            addedPids.forEach( pid => {
+                if (interval.ets == null) {
+                    dpProm.push(getDatapointData(pid));
                 } else {
-                    PubSub.publish('datapointConfigReq',{pid:pid});
+                    dpProm.push(getDatapointData(pid, this.state.interval));
                 }
-                if (!this.state.data.hasOwnProperty(pid)) {
-                    data[pid]=[];
-                    PubSub.publish('datapointDataReq',{pid:pid});
+                var confTopic = this.subscriptionTokens[this.props.wid].some( d => {
+                    return d.msg == topics.DATAPOINT_CONFIG_UPDATE(pid);
+                });
+                var dataTopic = this.subscriptionTokens[this.props.wid].some( d => {
+                    return d.msg == topics.DATAPOINT_CONFIG_UPDATE(pid);
+                });
+                if (!confTopic) {
+                    newSubscriptions.push(topics.DATAPOINT_CONFIG_UPDATE(pid));
+                }
+                if (!dataTopic) {
+                    newSubscriptions.push(topics.DATAPOINT_DATA_UPDATE(pid));
+                }
+            });
+        }
+
+        Promise.all(dpProm).then( values => {
+            if (shouldUpdate) {
+                var etss = [];
+                var itss = [];
+                values.forEach( value => {
+                    if (value.hasOwnProperty('data')) {
+                        data[value.pid]=value.data;
+                        if (interval.ets == null) {
+                            var dpTs = value.data.map(d => d.ts);
+                            etss.push(Math.max.apply(null, dpTs));
+                            itss.push(Math.min.apply(null, dpTs));
+                        }
+                    } else {
+                        newConfig[value.pid]=value;
+                    }
+                });
+
+                if (etss.length > 0) {
+                    interval.ets = Math.max.apply(null, etss);
+                    var sumItss = itss.reduce((a, b) => a + b, 0);
+                    interval.its = sumItss/itss.length;
+                } else if (newPids.length == 0) {
+                    interval.ets = null;
+                    interval.its = null;
+                }
+
+                newSubscriptions.forEach(topic => {
+                    this.subscriptionTokens[this.props.wid].push({
+                        token:PubSub.subscribe(topic,this.subscriptionHandler),
+                        msg:topic
+                    });
+                });
+
+                this.setState({config:newConfig, data:data, interval:interval});
+            } else {
+                shouldUpdate = values.some( value => {
+                    if (value.datapointname != this.state.config[value.pid].datapointname) {
+                        return true;
+                    } else if ( value.color != this.state.config[value.pid].color) {
+                        return true;
+                    }
+                });
+                if (shouldUpdate) {
+                    values.map ( value => {
+                        newConfig[value.pid]=value;
+                    });
+                    this.setState({config:newConfig});
                 }
             }
-            this.setState({config:datapoints, pids:widgetConfig.datapoints, widgetname:widgetConfig.widgetname, data:data});
-        } else {
-            PubSub.publish('widgetConfigReq',{wid:this.props.wid});
-        }
-
+        });
     }
 
-    refreshData (interval, pid) {
-        if (pid) {
-            var selectedPids=[pid];
-        } else {
-            var selectedPids=this.state.pids;
-        }
-        if (selectedPids != null) {
-            var data=this.state.data;
-            selectedPids.forEach( pid => {
-                data[pid]=getIntervalData(pid, interval);
+    async refreshData (interval, pid) {
+        var shouldUpdate = false;
+        if ((this.state.live && interval.ets > this.state.interval.ets) ||
+            (this.state.interval.ets >= interval.ets && this.state.interval.its <= interval.ets) ||
+            (this.state.interval.its <= interval.its && this.state.interval.ets >= interval.its)) {
+            var newData = await getDatapointData(pid, interval);
+            //for new or different samples
+            shouldUpdate = newData.data.some( d => {
+                var haveIt = this.state.data[pid].some ( e => e.ts == d.ts && e.value == d.value);
+                return !haveIt;
             });
-            this.setState({interval:interval,data:data});
+            //for deleted samples
+            if (!shouldUpdate) {
+                var intervalData = this.state.data[pid].filter( d => d.ts >= interval.its && d.ts <= interval.ets);
+                if (intervalData.length != newData.data.length) {
+                    shouldUpdate = true;
+                }
+            }
         }
+        if (shouldUpdate) {
+            var data = {};
+            var newInt;
+            var intervalLength = this.state.interval.ets - this.state.interval.its;
+            var newTs = newData.data.map(d => d.ts);
+            var ets = Math.max.apply(null, newTs);
+            if (ets > this.state.interval.ets) {
+                newInt = {ets:ets,its:ets-intervalLength};
+                Object.keys(this.state.data).forEach ( other_pid => {
+                    if (other_pid != pid) {
+                        data[other_pid] = this.state.data[other_pid].filter( d => {
+                            return d.ts <= interval.ets && d.ts >= interval.its;
+                        });
+                    }
+                });
+            } else {
+                newInt = this.state.interval;
+                Object.keys(this.state.data).forEach ( other_pid => {
+                    if (other_pid != pid) {
+                        data[other_pid] = this.state.data[other_pid];
+                    }
+                });
+            }
+            newData = await getDatapointData(this.state.pid, newInt);
+            data[pid]=newData.data;
+            this.setState({data: data, interval:newInt});
+        }
+    }
+
+    getDataSummary () {
+        var pids = Object.keys(this.state.config);
+        var summary = pids.map( (pid,i) => {
+            var color = this.state.config[pid].color;
+            var name = this.state.config[pid].datapointname;
+            var data = this.state.data[pid];
+            var numSamples = data.length;
+            var summary = {};
+            if (numSamples>0) {
+                var allValues = data.map( d => d.value);
+                var maxValue=Math.max.apply(null, allValues);
+                var minValue=Math.min.apply(null, allValues);
+                var sumValues = allValues.reduce((a, b) => a + b, 0);
+                var meanValue=sumValues/numSamples;
+                if ((maxValue % 1) != 0 || (minValue % 1) != 0) {
+                    if (typeof maxValue % 1 == 'number' && maxValue % 1 != 0) {
+                        var numDecimalsMaxValue=maxValue.toString().split('.')[1].length;
+                    } else {
+                        var numDecimalsMaxValue=2;
+                    }
+                    if (typeof minValue % 1 == 'number' && minValue % 1 != 0) {
+                        var numDecimalsMinValue=minValue.toString().split('.')[1].length;
+                    } else {
+                        var numDecimalsMinValue=2;
+                    }
+                    var numDecimals=Math.max(numDecimalsMaxValue,numDecimalsMinValue);
+                } else {
+                    var numDecimals=2;
+                }
+                meanValue = meanValue.toFixed(numDecimals);
+                summary.max = d3.format(',')(maxValue);
+                summary.min = d3.format(',')(minValue);
+                summary.mean = d3.format(',')(meanValue);
+            } else {
+                summary.max = '-';
+                summary.min = '-';
+                summary.mean = '-';
+            }
+            return (
+              <tr key={i}>
+                <td>
+                  <span style={{backgroundColor:color,borderRadius:"2px"}}>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                  <span> {name}</span>
+                </td>
+                <td>{summary.max}</td>
+                <td>{summary.min}</td>
+                <td>{summary.mean}</td>
+              </tr>
+            );
+        });
+        return (
+          <table className="table-condensed">
+            <tbody>
+              <tr>
+                <th></th>
+                <th>max</th>
+                <th>min</th>
+                <th>mean</th>
+              </tr>
+              {summary}
+            </tbody>
+          </table>
+        );
     }
 
     onDrop = (e) => {
@@ -1703,41 +2100,30 @@ class WidgetMp extends React.Component {
     }
 
     render () {
-        if (this.state.pids != null && this.state.pids.length == 0) {
+        if (this.state.loading) {
             return (
-              <div style={{ color:"#aaa", fontFamily:"sans-serif",fontSize:"18px", fontWeight:"800",lineHeight:"36px", padding:"72px 0 80px", textAlign:"center"}} onDrop={this.onDrop} onDragEnter={this.onDragEnter} onDragOver={this.onDragOver}>
+              <div style={styles.banner}>
+                Loading...
+              </div>
+            );
+        }
+        if (Object.keys(this.state.config).length == 0) {
+            return (
+              <div style={styles.banner} onDrop={this.onDrop} onDragEnter={this.onDragEnter} onDragOver={this.onDragOver}>
                 Add datapoints by dragging them from your data model
                 <br/>
                 <ReactBootstrap.Glyphicon style={{fontSize:"48px"}} glyph="hand-left" />
               </div>
             );
         }
-        var datapoints = this.state.pids;
-        var summary=datapoints.map( key => {
-            if (this.state.config.hasOwnProperty(key)) {
-                var dpSummary=getDataSummary(this.state.data[key]);
-                var datapointStyle={backgroundColor: this.state.config[key].color, borderRadius: '5px'};
-                var name = this.state.config[key].datapointname.slice(-30);
-                if (name.length == 30) {
-                    name="..."+name;
-                }
-                return (
-                  <tr key={key}>
-                    <td>
-                      <span style={datapointStyle}>&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                      <span> {name}</span>
-                    </td>
-                    <td>{dpSummary.max}</td>
-                    <td>{dpSummary.min}</td>
-                    <td>{dpSummary.mean}</td>
-                  </tr>
-                );
-            }
-        });
-        var data=datapoints.map( key => {
-            if (this.state.config.hasOwnProperty(key)) {
-                return {pid:key,color:this.state.config[key].color,datapointname:this.state.config[key].datapointname,data:this.state.data[key]};
-            }
+        var summary = this.getDataSummary();
+        var data=Object.keys(this.state.config).map( pid => {
+            return {
+                pid:pid,
+                color:this.state.config[pid].color,
+                datapointname:this.state.config[pid].datapointname,
+                data:this.state.data[pid]
+            };
         });
         var share_modal= (
           <ReactBootstrap.Modal show={this.state.shareModal} onHide={this.cancelSnapshot}>
@@ -1758,17 +2144,7 @@ class WidgetMp extends React.Component {
         return (
           <div onDrop={this.onDrop} onDragEnter={this.onDragEnter} onDragOver={this.onDragOver}>
             <div className="dp-stats">
-              <table className="table-condensed">
-                <tbody>
-                  <tr>
-                    <th></th>
-                    <th>max</th>
-                    <th>min</th>
-                    <th>mean</th>
-                  </tr>
-                  {summary}
-                </tbody>
-              </table>
+              {summary}
             </div>
             <div className="row visual-bar">
               <div className="col-md-5 text-center">
@@ -1791,7 +2167,6 @@ class WidgetMp extends React.Component {
 }
 
 class TimeSlider extends React.Component {
-
     notifyNewInterval = (interval) => {
         this.props.newIntervalCallback(interval);
     }
@@ -1849,7 +2224,6 @@ class ContentLinegraph extends React.Component {
 }
 
 class ContentHistogram extends React.Component {
-
     componentDidMount () {
         var el = ReactDOM.findDOMNode(this);
         d3Histogram.create(el, this.props.data);
@@ -1866,7 +2240,6 @@ class ContentHistogram extends React.Component {
 }
 
 class ContentTable extends React.Component {
-
     componentDidMount () {
         var el = ReactDOM.findDOMNode(this);
         d3Table.create(el, this.props.data);

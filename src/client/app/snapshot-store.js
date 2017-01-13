@@ -1,200 +1,152 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
+import {topics} from './types.js';
 
 class SnapshotStore {
     constructor () {
+        this.minConfigRequestIntervalms = 300000;
+
         this._snapshotConfig = {};
+        this._lastConfigUpdate = {};
         this.subscriptionTokens = [];
-        this.subscriptionTokens.push({token:PubSub.subscribe('snapshotConfigReq', this.subscriptionHandler.bind(this)),msg:'snapshotConfigReq'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('deleteSnapshot', this.subscriptionHandler.bind(this)),msg:'deleteSnapshot'});
+
+        this.subscriptionTokens.push({
+            token:PubSub.subscribe(topics.SNAPSHOT_CONFIG_REQUEST,this.subscriptionHandler.bind(this)),
+            msg:topics.SNAPSHOT_CONFIG_REQUEST
+        });
+
+        this.subscriptionTokens.push({
+            token:PubSub.subscribe(topics.DELETE_SNAPSHOT,this.subscriptionHandler.bind(this)),
+            msg:topics.DELETE_SNAPSHOT
+        });
     }
 
     subscriptionHandler (msg, data) {
         switch (msg) {
-            case 'snapshotConfigReq':
-                processMsgSnapshotConfigReq(data);
+            case topics.SNAPSHOT_CONFIG_REQUEST:
+                processMsgSnapshotConfigRequest(data);
                 break;
-            case 'deleteSnapshot':
+            case topics.DELETE_SNAPSHOT:
                 processMsgDeleteSnapshot(data);
                 break;
         }
     }
 
-    storeSnapshotConfig (nid, data) {
-        var doStore=false;
-        if (!this._snapshotConfig.hasOwnProperty(nid)) {
-            this._snapshotConfig[nid]={};
-            Object.keys(data).forEach( key => {
-                this._snapshotConfig[nid][key]=data[key];
+    updateLastConfigUpdate (nid) {
+        var now=new Date().getTime();
+        this._lastConfigUpdate[nid] = now;
+    }
+
+    getLastConfigUpdate (nid) {
+        if (this._lastConfigUpdate.hasOwnProperty(nid)) {
+            return this._lastConfigUpdate[nid];
+        } else {
+            return 0;
+        }
+    }
+
+    getConfig (nid, tid) {
+        var now=new Date().getTime();
+        var elapsed = now - this.getLastConfigUpdate(nid);
+        if ( elapsed > this.minConfigRequestIntervalms) {
+            var config;
+            var parameters = {};
+            if (tid) {
+                parameters={t:tid};
+            }
+            var promise = new Promise( (resolve, reject) => {
+                $.ajax({
+                    url: '/etc/sn/'+nid,
+                    dataType: 'json',
+                    data: parameters,
+                })
+                .done( data => {
+                    var result = this.storeConfig(nid, data);
+                    this.updateLastConfigUpdate(nid);
+                    if (result.modified == true) {
+                        var topic = topics.SNAPSHOT_CONFIG_UPDATE(nid);
+                        PubSub.publish(topic,nid);
+                    }
+                    config = data;
+                    resolve(config);
+                });
             });
-            doStore=true;
+            return promise;
+        } else {
+            var config = this._snapshotConfig[nid];
+            return Promise.resolve(config);
+        }
+    }
+
+    storeConfig (nid, data) {
+        var result = {};
+        if (!this._snapshotConfig.hasOwnProperty(nid)) {
+            this._snapshotConfig[nid]=data;
+            result.modified = true;
         }
         else {
-            Object.keys(data).forEach(key => {
-                if (!(this._snapshotConfig[nid].hasOwnProperty(key) && this._snapshotConfig[nid][key]==data[key])) {
-                    doStore=true;
-                }
+            var differs = Object.keys(data).some( key => {
+                return !(this._snapshotConfig[nid].hasOwnProperty(key) && this._snapshotConfig[nid][key] == data[key]);
             });
-            if (doStore) {
-                this._snapshotConfig[nid]=data;
+            if (differs) {
+                this._snapshotConfig[nid] = data;
+                result.modified = true;
             }
         }
-        return doStore;
+        return result;
+    }
+
+    deleteSnapshot (nid) {
+        var response;
+        return new Promise ( (resolve,reject) => {
+            if (nid) {
+                $.ajax({
+                    url: '/etc/ds/'+did,
+                    dataType: 'json',
+                    type: 'DELETE',
+                })
+                .done( data => {
+                    if (this._lastConfigUpdate.hasOwnProperty(nid)) {
+                        delete this._lastConfigUpdate[nid];
+                    }
+                    if (this._snapshotConfig.hasOwnProperty(nid)) {
+                        delete this._snapshotConfig[nid];
+                    }
+                    response = data;
+                    resolve(response);
+                });
+            }
+        });
     }
 
 }
 
 let snapshotStore = new SnapshotStore();
 
+function getSnapshotConfig (nid, tid) {
+    return snapshotStore.getConfig(nid, tid);
+}
+
+function processMsgSnapshotConfigRequest (msgData) {
+    if (msgData.nid) {
+        snapshotStore.getConfig(msgData.nid, msgData.tid);
+    }
+}
+
 function processMsgDeleteSnapshot(msgData) {
-    if (msgData.hasOwnProperty('nid')) {
-        $.ajax({
-            url: '/etc/sn/'+msgData.nid,
-            dataType: 'json',
-            type: 'DELETE',
-        })
-        .then( data => {
-            PubSub.publish('closeSlide',{lid:msgData.nid});
-        }, data => {
-            PubSub.publish('barMessage',{message:{type:'danger',message:'Error deleting snapshot. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
-        });
-    }
-}
-
-function processMsgSnapshotConfigReq (data) {
-    if (data.hasOwnProperty('nid')) {
-        if (snapshotStore._snapshotConfig.hasOwnProperty(data.nid)) {
-            sendSnapshotConfigUpdate(data.nid);
-        }
-        requestSnapshotConfig(data.nid, data.tid);
-    }
-}
-
-function requestSnapshotConfig (nid, tid) {
-    var parameters = {};
-    if (tid) {
-        parameters={t:tid};
-    }
-    $.ajax({
-        url: '/etc/sn/'+nid,
-        dataType: 'json',
-        data: parameters,
+    snapshotStore.deleteSnapshot(msgData.nid)
+    .then( data => {
+        PubSub.publish(topics.CLOSE_SLIDE,{lid:msgData.nid});
     })
-    .done(data => {
-        var changed=snapshotStore.storeSnapshotConfig(nid, data);
-        if (changed == true) {
-            sendSnapshotConfigUpdate(nid);
-        }
+    .catch( data => {
+        payload = {
+            message:{type:'danger',message:'Error deleting datasource. Code: '+data.responseJSON.error},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE,payload);
     });
 }
 
-function sendSnapshotConfigUpdate (nid) {
-    if (snapshotStore._snapshotConfig.hasOwnProperty(nid)) {
-        PubSub.publish('snapshotConfigUpdate-'+nid,nid);
-    }
-}
-
 export {
-    snapshotStore
+    getSnapshotConfig
 }
-
-
-/*
-
-function SnapshotStore () {
-    this._snapshotConfig = {};
-    this.subscriptionTokens = [];
-
-    this.subscriptionTokens.push({token:PubSub.subscribe('snapshotConfigReq', this.subscriptionHandler.bind(this)),msg:'snapshotConfigReq'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('deleteSnapshot', this.subscriptionHandler.bind(this)),msg:'deleteSnapshot'});
-
-}
-
-SnapshotStore.prototype = {
-    subscriptionHandler: function (msg, data) {
-        switch (msg) {
-            case 'snapshotConfigReq':
-                processMsgSnapshotConfigReq(data)
-                break;
-            case 'deleteSnapshot':
-                processMsgDeleteSnapshot(data)
-                break;
-        }
-    },
-};
-
-var snapshotStore = new SnapshotStore();
-
-
-function processMsgDeleteSnapshot(msgData) {
-    if (msgData.hasOwnProperty('nid')) {
-        $.ajax({
-            url: '/etc/sn/'+msgData.nid,
-            dataType: 'json',
-            type: 'DELETE',
-        })
-        .then(function(data){
-            PubSub.publish('closeSlide',{lid:msgData.nid});
-        }, function(data){
-            PubSub.publish('barMessage',{message:{type:'danger',message:'Error deleting snapshot. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
-        });
-    }
-}
-
-function processMsgSnapshotConfigReq (data) {
-    if (data.hasOwnProperty('nid')) {
-        if (snapshotStore._snapshotConfig.hasOwnProperty(data.nid)) {
-            sendSnapshotConfigUpdate(data.nid)
-        }
-        requestSnapshotConfig(data.nid, data.tid)
-    }
-}
-
-function requestSnapshotConfig (nid, tid) {
-    if (tid) {
-        parameters={t:tid}
-    } else {
-        parameters={}
-    }
-    $.ajax({
-        url: '/etc/sn/'+nid,
-        dataType: 'json',
-        data: parameters,
-    })
-    .done(function (data) {
-        changed=storeSnapshotConfig(nid, data);
-        if (changed == true) {
-            sendSnapshotConfigUpdate(nid);
-        }
-    })
-}
-
-function storeSnapshotConfig (nid, data) {
-    doStore=false
-    if (!snapshotStore._snapshotConfig.hasOwnProperty(nid)) {
-        snapshotStore._snapshotConfig[nid]={}
-        $.each(data, function (key,value) {
-            snapshotStore._snapshotConfig[nid][key]=value
-        });
-        doStore=true
-    }
-    else {
-        $.each(data, function (key,value) {
-            if (!(snapshotStore._snapshotConfig[nid].hasOwnProperty(key) && snapshotStore._snapshotConfig[nid][key]==value)) {
-                doStore=true
-            }
-        });
-        if (doStore) {
-            snapshotStore._snapshotConfig[nid]=data
-        }
-    }
-    return doStore;
-}
-
-function sendSnapshotConfigUpdate (nid) {
-    if (snapshotStore._snapshotConfig.hasOwnProperty(nid)) {
-        PubSub.publish('snapshotConfigUpdate-'+nid,nid)
-    }
-}
-
-*/

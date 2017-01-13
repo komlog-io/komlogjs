@@ -2,58 +2,95 @@ import React from 'react';
 import PubSub from 'pubsub-js';
 import * as ReactBootstrap from 'react-bootstrap';
 import {TreeItem} from './navtree.jsx';
-import {dashboardStore} from './dashboard-store.js';
+import {getDashboardConfig} from './dashboard-store.js';
 import {getSharedUrisWithMe} from './uri-store.js';
+import {topics} from './types.js';
 
 class DashboardList extends React.Component {
     state = {
-        activeBid: '0'
+        activeBid: '0',
+        dashboards: []
     };
 
     subscriptionTokens = [];
 
-    constructor(props) {
-        super(props);
-        this.subscriptionTokens.push({token:PubSub.subscribe('dashboardConfigUpdate', this.subscriptionHandler),msg:'dashboardConfigUpdate'});
-    }
+    async initialization () {
+        var dashboards = await getDashboardConfig();
 
-    subscriptionHandler = (msg,data) => {
-        if (/dashboardConfigUpdate/.test(msg)) {
-            this.updateDashboardList();
-        }
+        var info = dashboards.map ( db => {
+            return {
+                bid:db.bid,
+                dashboardname:db.dashboardname
+            }
+        });
+
+        info.sort( (a,b) => a.dashboardname.localeCompare(b.dashboardname));
+
+        var subscribedTopics = [
+            topics.DASHBOARD_CONFIG_UPDATE(),
+        ];
+
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
+        });
+
+        this.setState({dashboards:info});
+
     }
 
     componentDidMount () {
-        PubSub.publish('dashboardsConfigReq',{});
+        this.initialization();
+    }
+
+    subscriptionHandler = (msg,data) => {
+        var topic = topics.DASHBOARD_CONFIG_UPDATE();
+        var re = new RegExp(topic);
+        if (re.test(msg)) {
+            this.refreshConfig(data.bid);
+        }
     }
 
     switchDashboard = (bid, event) => {
         event.preventDefault();
-        PubSub.publish('showDashboard',{bid:bid});
+        PubSub.publish(topics.SHOW_DASHBOARD,{bid:bid});
         this.setState({activeBid:bid});
     }
 
-    updateDashboardList () {
-        this.forceUpdate();
+    async refreshConfig (bid) {
+        var currentDashboards = this.state.dashboards;
+        var dashboard = await getDashboardConfig(bid);
+        var updated = currentDashboards.some( db => {
+           if(db.bid == dashboard.bid && db.dashboardname == dashboard.dashboardname) {
+               return true;
+           }
+        });
+        if (!updated) {
+            var newDashboards = currentDashboards.filter (db => db.bid != dashboard.bid);
+            newDashboards.push({bid:dashboard.bid, dashboardname:dashboard.dashboardname});
+            newDashboards.sort( (a,b) => a.dashboardname.localeCompare(b.dashboardname));
+            this.setState({dashboards:newDashboards});
+        }
     }
 
     getDashboardList () {
-        var dashboards=[];
         var activeBid = this.state.activeBid;
-        for (var bid in dashboardStore._dashboardConfig) {
-            dashboards.push({bid:bid, dashboardname:dashboardStore._dashboardConfig[bid].dashboardname});
-        }
-        dashboards.sort( (a,b) => {
-            return a.dashboardname.localeCompare(b.dashboardname);
-        });
-        var listItems=dashboards.map( (e,i) => {
-            var className=activeBid == e.bid ? "list-item-active" : "list-item";
-            return <li key={i+1} className={className} onClick={this.switchDashboard.bind(this, e.bid)}>{e.dashboardname}</li>;
-        });
-        var className=activeBid == 0 ? "list-item-active" : "list-item";
+        var listItems=this.state.dashboards.map( (e,i) =>
+              <li key={i+1}
+                  className={activeBid == e.bid ? "list-item-active" : "list-item"}
+                  onClick={this.switchDashboard.bind(this, e.bid)}>
+                {e.dashboardname}
+              </li>
+        );
         return (
           <ul className="menu-list">
-            <li key={0} className={className} onClick={this.switchDashboard.bind(this,'0')}>Home</li>
+            <li key={0}
+                className={activeBid == 0 ? "list-item-active" : "list-item"}
+                onClick={this.switchDashboard.bind(this,'0')}>
+              Home
+            </li>
             {listItems}
           </ul>
         );

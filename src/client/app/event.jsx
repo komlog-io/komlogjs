@@ -5,7 +5,8 @@ import $ from 'jquery';
 import * as ReactBootstrap from 'react-bootstrap';
 import * as d3 from 'd3';
 import {d3SummaryLinegraph, d3SummaryDatasource} from './graphs.jsx';
-import {getEventList, getNumEventsNewerThan, sendEventResponse} from './event-store.js';
+import {getEvents, sendEventResponse} from './event-store.js';
+import {topics, styles} from './types.js';
 
 
 class EventSummary extends React.Component {
@@ -341,25 +342,52 @@ class EventTypeDatapointIdentification extends React.Component {
 
 class EventsSideBar extends React.Component {
     state = {
+        loading: true,
         events:[],
         newEvents: false,
         numNewEvents: null,
-        lastSeq: null,
     };
 
     subscriptionTokens = [];
 
-    constructor (props) {
-        super(props);
-        this.subscriptionTokens.push({token:PubSub.subscribe('newEvents', this.subscriptionHandler),msg:'newEvents'});
+    async initialization () {
+        console.log('initialization events');
+        var events = await getEvents();
+        events.sort( (a,b) => b.ts - a.ts);
+
+        var eventsTs = events.map(ev => ev.ts);
+        var newestTs = Math.max.apply(null, eventsTs);
+        var oldestTs = Math.min.apply(null, eventsTs);
+
+        var subscribedTopics = [
+            topics.NEW_EVENTS
+        ];
+
+        subscribedTopics.forEach(topic => {
+            this.subscriptionTokens.push({
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            });
+        });
+
+        this.setState({
+            loading: false,
+            newestTs: newestTs,
+            oldestTs: oldestTs,
+            events:events,
+        });
     }
 
     componentDidMount () {
-        this.refreshEvents();
+        this.initialization();
+        var div = $("#sidebar-right")
+        $(div).on('scroll', (ev) => {
+            this.handleScroll(ev);
+        });
     }
 
     componentWillUnmount () {
-        this.subscriptionTokens.map( d => {
+        this.subscriptionTokens.forEach( d => {
             PubSub.unsubscribe(d.token);
         });
     }
@@ -373,22 +401,42 @@ class EventsSideBar extends React.Component {
     }
 
     disableEvent = (seq,e) => {
-        PubSub.publish('deleteEvent',{seq:seq});
-        var newEvents=this.state.events.filter( el => el.seq !== seq );
-        this.setState({events:newEvents});
+        PubSub.publish(topics.DELETE_EVENT,{seq:seq});
     }
 
-    refreshEvents () {
-        if (this.state.lastSeq == null || $('#events-sidebar').position().top==0) {
-            this.showNewEvents();
-        } else {
-            var numNewEvents=getNumEventsNewerThan(this.state.lastSeq);
-            if (numNewEvents>0) {
-                this.setState({newEvents:true,numNewEvents:numNewEvents});
-            } else {
-                this.setState({newEvents:false,numNewEvents:0});
-            }
+    async refreshEvents () {
+        console.log('refresh events');
+        var events = await getEvents();
+
+        events.sort( (a,b) => b.ts - a.ts);
+
+        var eventsTs = events.map(ev => ev.ts);
+        var newestTs = Math.max.apply(null, eventsTs);
+        var oldestTs = Math.min.apply(null, eventsTs);
+
+        this.setState({
+            loading: false,
+            newestTs: newestTs,
+            oldestTs: oldestTs,
+            events:events,
+        });
+    }
+
+    handleScroll (ev) {
+        var node = ev.target;
+        if (node.scrollTop + node.offsetHeight == node.scrollHeight && this.state.loading == false) {
+            this.setState({loading:true});
+            this.loadOlderEvents();
         }
+    }
+
+    loadOlderEvents () {
+        console.log('loadolder events');
+        var ets = this.state.oldestTs;
+        var olderEvents = getEvents(ets);
+        olderEvents.then( events => {
+            this.setState({loading:false});
+        });
     }
 
     showNewEvents = () => {
@@ -416,6 +464,14 @@ class EventsSideBar extends React.Component {
                 return <EventTypeDatapointIdentification key={i} data={d} />;
             }
         });
+        if (this.state.loading) {
+            var loading_banner = (
+              <div key="banner" style={styles.eventsBanner}>
+                Loading ...
+              </div>
+            );
+            eventList.push(loading_banner);
+        }
         return eventList;
     }
 

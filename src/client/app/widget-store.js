@@ -1,73 +1,133 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
+import {topics} from './types.js';
 
 class WidgetStore {
     constructor () {
-        this._widgetConfig = {};
-        this.subscriptionTokens = [];
+        this.minConfigRequestIntervalms = 300000;
 
-        this.subscriptionTokens.push({token:PubSub.subscribe('widgetConfigReq', this.subscriptionHandler.bind(this)),msg:'widgetConfigReq'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('newWidget', this.subscriptionHandler.bind(this)),msg:'newWidget'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('modifyWidget', this.subscriptionHandler.bind(this)),msg:'modifyWidget'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('deleteWidget', this.subscriptionHandler.bind(this)),msg:'deleteWidget'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('newWidgetDsSnapshot', this.subscriptionHandler.bind(this)),msg:'newWidgetDsSnapshot'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('newWidgetDpSnapshot', this.subscriptionHandler.bind(this)),msg:'newWidgetDpSnapshot'});
-        this.subscriptionTokens.push({token:PubSub.subscribe('newWidgetMpSnapshot', this.subscriptionHandler.bind(this)),msg:'newWidgetMpSnapshot'});
+        this._widgetConfig = {};
+        this._lastConfigUpdate = {};
+
+        var subscribedTopics = [
+            topics.WIDGET_CONFIG_REQUEST,
+            topics.NEW_WIDGET,
+            topics.MODIFY_WIDGET,
+            topics.DELETE_WIDGET,
+            topics.NEW_WIDGET_DS_SNAPSHOT,
+            topics.NEW_WIDGET_DP_SNAPSHOT,
+            topics.NEW_WIDGET_MP_SNAPSHOT,
+        ];
+
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
+        });
 
     }
 
     subscriptionHandler (msg, data) {
         switch (msg) {
-            case 'widgetConfigReq':
-                processMsgWidgetConfigReq(data);
+            case topics.WIDGET_CONFIG_REQUEST:
+                processMsgWidgetConfigRequest(data);
                 break;
-            case 'newWidget':
+            case topics.NEW_WIDGET:
                 processMsgNewWidget(data);
                 break;
-            case 'modifyWidget':
+            case topics.MODIFY_WIDGET:
                 processMsgModifyWidget(data);
                 break;
-            case 'deleteWidget':
+            case topics.DELETE_WIDGET:
                 processMsgDeleteWidget(data);
                 break;
-            case 'newWidgetDsSnapshot':
+            case topics.NEW_WIDGET_DS_SNAPSHOT:
                 processMsgNewWidgetDsSnapshot(data);
                 break;
-            case 'newWidgetDpSnapshot':
+            case topics.NEW_WIDGET_DP_SNAPSHOT:
                 processMsgNewWidgetDpSnapshot(data);
                 break;
-            case 'newWidgetMpSnapshot':
+            case topics.NEW_WIDGET_MP_SNAPSHOT:
                 processMsgNewWidgetMpSnapshot(data);
                 break;
         }
     }
 
-    storeConfig (wid, data) {
-        var doStore=false;
-        if (!this._widgetConfig.hasOwnProperty(wid)) {
-            this._widgetConfig[wid]={};
-            Object.keys(data).forEach(key => {
-                this._widgetConfig[wid][key]=data[key];
+    updateLastConfigUpdate (wid) {
+        var now=new Date().getTime();
+        this._lastConfigUpdate[wid] = now;
+    }
+
+    getLastConfigUpdate (wid) {
+        if (this._lastConfigUpdate.hasOwnProperty(wid)) {
+            return this._lastConfigUpdate[wid];
+        } else {
+            return 0;
+        }
+    }
+
+    getConfig ({wid, force}={}) {
+        var now=new Date().getTime();
+        var elapsed = now - this.getLastConfigUpdate(wid);
+        if ( force == true || elapsed > this.minConfigRequestIntervalms) {
+            var config;
+            var promise = new Promise( (resolve, reject) => {
+                $.ajax({
+                    url: '/etc/wg/'+wid,
+                    dataType: 'json',
+                })
+                .done( data => {
+                    var result = this.storeConfig(wid, data);
+                    this.updateLastConfigUpdate(wid);
+                    if (result.modified == true) {
+                        console.log('mandando actualizacion de widget',wid);
+                        var topic = topics.WIDGET_CONFIG_UPDATE(wid);
+                        PubSub.publish(topic,wid);
+                    }
+                    config = data;
+                    resolve(config);
+                });
             });
-            doStore=true;
+            return promise;
+        } else {
+            var config = this._widgetConfig[wid];
+            return Promise.resolve(config);
+        }
+    }
+
+    storeConfig (wid, data) {
+        var result = {};
+        if (!this._widgetConfig.hasOwnProperty(wid)) {
+            this._widgetConfig[wid]=data;
+            result.modified = true;
         }
         else {
-            Object.keys(data).forEach( key => {
-                if (!(this._widgetConfig[wid].hasOwnProperty(key) && this._widgetConfig[wid][key]==data[key])) {
-                    doStore=true;
-                }
+            var differs = Object.keys(data).some( key => {
+                return !(this._widgetConfig[wid].hasOwnProperty(key) && this._widgetConfig[wid][key]==data[key]);
             });
-            if (doStore) {
+            if (differs) {
                 this._widgetConfig[wid]=data;
+                result.modified = true;
             }
         }
-        return doStore;
+        return result;
     }
 }
 
 let widgetStore = new WidgetStore();
 
 
+function getWidgetConfig (wid) {
+    return widgetStore.getConfig({wid:wid});
+}
+
+
+function processMsgWidgetConfigRequest(msgData) {
+    if (msgData.wid) {
+        widgetStore.getConfig({wid:msgData.wid,force:msgData.force});
+    }
+}
 
 function processMsgNewWidget(msgData) {
     var requestData={type:msgData.type,widgetname:msgData.widgetname};
@@ -78,10 +138,14 @@ function processMsgNewWidget(msgData) {
         data: JSON.stringify(requestData),
     })
     .done( data => {
-        PubSub.publish('loadSlide',{wid:data.wid});
+        PubSub.publish(topics.LOAD_SLIDE,{wid:data.wid});
     })
     .fail( data => {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating graph. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'danger',message:'Error creating graph. Code: '+data.responseJSON.error},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE,payload);
     });
 }
 
@@ -110,7 +174,7 @@ function processMsgModifyWidget(msgData) {
         });
     }
     var endModify = () => {
-        PubSub.publish('widgetConfigReq',{wid:msgData.wid});
+        PubSub.publish(topics.WIDGET_CONFIG_REQUEST,{wid:msgData.wid,force:true});
     }
     var requests=[];
     if (msgData.hasOwnProperty('new_widgetname')) {
@@ -160,31 +224,12 @@ function processMsgDeleteWidget(msgData) {
         })
         .then( data => {
         }, data => {
-            PubSub.publish('barMessage',{message:{type:'danger',message:'Error deleting widget. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
+            var payload = {
+                message:{type:'danger',message:'Error deleting widget. Code: '+data.responseJSON.error},
+                messageTime:(new Date).getTime()
+            };
+            PubSub.publish(topics.BAR_MESSAGE,payload);
         });
-    }
-}
-
-function processMsgWidgetConfigReq (data) {
-    if (data.hasOwnProperty('wid')) {
-        requestWidgetConfig(data.wid);
-    }
-}
-
-function requestWidgetConfig (wid) {
-    $.ajax({
-        url: '/etc/wg/'+wid,
-        dataType: 'json',
-    })
-    .done( data => {
-        widgetStore.storeConfig(wid, data);
-        sendWidgetConfigUpdate(wid);
-    });
-}
-
-function sendWidgetConfigUpdate (wid) {
-    if (widgetStore._widgetConfig.hasOwnProperty(wid)) {
-        PubSub.publish('widgetConfigUpdate-'+wid,wid);
     }
 }
 
@@ -197,10 +242,18 @@ function processMsgNewWidgetDsSnapshot(msgData) {
         data: JSON.stringify(requestData),
     })
     .done( data => {
-        PubSub.publish('barMessage',{message:{type:'success',message:'Snapshot shared successfully'},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'success',message:'Snapshot shared successfully'},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE,payload);
     })
     .fail( data => {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE,payload);
     });
 }
 
@@ -213,10 +266,18 @@ function processMsgNewWidgetDpSnapshot(msgData) {
         data: JSON.stringify(requestData),
     })
     .done( data => {
-        PubSub.publish('barMessage',{message:{type:'success',message:'Snapshot shared successfully'},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'success',message:'Snapshot shared successfully'},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE,payload);
     })
     .fail( data => {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE,payload);
     });
 }
 
@@ -229,250 +290,22 @@ function processMsgNewWidgetMpSnapshot(msgData) {
         data: JSON.stringify(requestData),
     })
     .done( data => {
-        PubSub.publish('barMessage',{message:{type:'success',message:'Snapshot shared successfully'},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'success',message:'Snapshot shared successfully'},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE,payload);
     })
     .fail( data => {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()});
+        var payload = {
+            message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE,payload);
     });
 }
 
 export {
-    widgetStore
+    getWidgetConfig
 }
 
-/*
-function WidgetStore () {
-    this._widgetConfig = {};
-    this.subscriptionTokens = [];
-
-    this.subscriptionTokens.push({token:PubSub.subscribe('widgetConfigReq', this.subscriptionHandler.bind(this)),msg:'widgetConfigReq'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('newWidget', this.subscriptionHandler.bind(this)),msg:'newWidget'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('modifyWidget', this.subscriptionHandler.bind(this)),msg:'modifyWidget'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('deleteWidget', this.subscriptionHandler.bind(this)),msg:'deleteWidget'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('newWidgetDsSnapshot', this.subscriptionHandler.bind(this)),msg:'newWidgetDsSnapshot'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('newWidgetDpSnapshot', this.subscriptionHandler.bind(this)),msg:'newWidgetDpSnapshot'});
-    this.subscriptionTokens.push({token:PubSub.subscribe('newWidgetMpSnapshot', this.subscriptionHandler.bind(this)),msg:'newWidgetMpSnapshot'});
-
-}
-
-WidgetStore.prototype = {
-    subscriptionHandler: function (msg, data) {
-        switch (msg) {
-            case 'widgetConfigReq':
-                processMsgWidgetConfigReq(data)
-                break;
-            case 'newWidget':
-                processMsgNewWidget(data)
-                break;
-            case 'modifyWidget':
-                processMsgModifyWidget(data)
-                break;
-            case 'deleteWidget':
-                processMsgDeleteWidget(data)
-                break;
-            case 'newWidgetDsSnapshot':
-                processMsgNewWidgetDsSnapshot(data)
-                break;
-            case 'newWidgetDpSnapshot':
-                processMsgNewWidgetDpSnapshot(data)
-                break;
-            case 'newWidgetMpSnapshot':
-                processMsgNewWidgetMpSnapshot(data)
-                break;
-        }
-    },
-    storeConfig: function (wid, data) {
-        doStore=false
-        if (!this._widgetConfig.hasOwnProperty(wid)) {
-            this._widgetConfig[wid]={}
-            $.each(data, function (key,value) {
-                this._widgetConfig[wid][key]=value
-            }.bind(this));
-            doStore=true
-        }
-        else {
-            $.each(data, function (key,value) {
-                if (!(this._widgetConfig[wid].hasOwnProperty(key) && this._widgetConfig[wid][key]==value)) {
-                    doStore=true
-                }
-            }.bind(this));
-            if (doStore) {
-                this._widgetConfig[wid]=data
-            }
-        }
-        return doStore;
-    }
-};
-
-var widgetStore = new WidgetStore();
-
-
-function processMsgNewWidget(msgData) {
-    requestData={type:msgData.type,widgetname:msgData.widgetname}
-    $.ajax({
-        url: '/etc/wg/',
-        dataType: 'json',
-        type: 'POST',
-        data: JSON.stringify(requestData),
-    })
-    .done(function (data) {
-        PubSub.publish('loadSlide',{wid:data.wid})
-    })
-    .fail(function (data) {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating graph. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-    })
-}
-
-function processMsgModifyWidget(msgData) {
-    var modifyWidgetname = function (widgetname) {
-        requestData={widgetname:widgetname}
-        return $.ajax({
-            url: '/etc/wg/'+msgData.wid,
-            dataType: 'json',
-            type: 'PUT',
-            data: JSON.stringify(requestData),
-        })
-    }
-    var addDatapoint = function (pid) {
-        return $.ajax({
-            url: '/etc/wg/'+msgData.wid+'/dp/'+pid,
-            dataType: 'json',
-            type: 'POST',
-        })
-    }
-    var deleteDatapoint = function (pid) {
-        return $.ajax({
-            url: '/etc/wg/'+msgData.wid+'/dp/'+pid,
-            dataType: 'json',
-            type: 'DELETE',
-        })
-    }
-    var endModify = function () {
-        PubSub.publish('widgetConfigReq',{wid:msgData.wid})
-    }
-    requests=[]
-    if (msgData.hasOwnProperty('new_widgetname')) {
-        requests.push({method:'widgetname',widgetname:msgData.new_widgetname})
-    }
-    if (msgData.hasOwnProperty('new_datapoints')) {
-        for (var i=0;i<msgData.new_datapoints.length;i++) {
-            requests.push({method:'add',pid:msgData.new_datapoints[i]})
-        }
-    }
-    if (msgData.hasOwnProperty('delete_datapoints')) {
-        for (var i=0;i<msgData.delete_datapoints.length;i++) {
-            requests.push({method:'delete',pid:msgData.delete_datapoints[i]})
-        }
-    }
-    chainRequests=[]
-    for (var i=0;i<requests.length;i++) {
-        if (i==0) {
-            if (requests[i].method=='widgetname') {
-                chainRequests.push(modifyWidgetname(requests[i].widgetname))
-            } else if (requests[i].method=='add') {
-                chainRequests.push(addDatapoint(requests[i].pid))
-            } else if (requests[i].method=='delete') {
-                chainRequests.push(deleteDatapoint(requests[i].pid))
-            }
-        } else {
-            if (requests[i].method=='widgetname') {
-                chainRequests.push(chainRequests[i-1].then(modifyWidgetname(requests[i].widgetname)))
-            } else if (requests[i].method=='add') {
-                chainRequests.push(chainRequests[i-1].then(addDatapoint(requests[i].pid)))
-            } else if (requests[i].method=='delete') {
-                chainRequests.push(chainRequests[i-1].then(deleteDatapoint(requests[i].pid)))
-            }
-        }
-    }
-    if (chainRequests.length>0) {
-        chainRequests[chainRequests.length-1].then(endModify())
-    }
-}
-
-function processMsgDeleteWidget(msgData) {
-    if (msgData.hasOwnProperty('wid')) {
-        $.ajax({
-            url: '/etc/wg/'+msgData.wid,
-            dataType: 'json',
-            type: 'DELETE',
-        })
-        .then(function(data){
-        }, function(data){
-            PubSub.publish('barMessage',{message:{type:'danger',message:'Error deleting widget. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-        });
-    }
-}
-
-function processMsgWidgetConfigReq (data) {
-    if (data.hasOwnProperty('wid')) {
-        requestWidgetConfig(data.wid)
-    }
-}
-
-function requestWidgetConfig (wid) {
-    $.ajax({
-        url: '/etc/wg/'+wid,
-        dataType: 'json',
-    })
-    .done(function (data) {
-        widgetStore.storeConfig(wid, data);
-        sendWidgetConfigUpdate(wid);
-    })
-}
-
-function sendWidgetConfigUpdate (wid) {
-    if (widgetStore._widgetConfig.hasOwnProperty(wid)) {
-        console.log('envio la conf del puto widget')
-        PubSub.publish('widgetConfigUpdate-'+wid,wid)
-    }
-}
-
-function processMsgNewWidgetDsSnapshot(msgData) {
-    requestData={seq:msgData.seq,ul:msgData.user_list}
-    $.ajax({
-        url: '/etc/wg/'+msgData.wid+'/sn/',
-        dataType: 'json',
-        type: 'POST',
-        data: JSON.stringify(requestData),
-    })
-    .done(function (data) {
-        PubSub.publish('barMessage',{message:{type:'success',message:'Snapshot shared successfully'},messageTime:(new Date).getTime()})
-    })
-    .fail(function (data) {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-    })
-}
-
-function processMsgNewWidgetDpSnapshot(msgData) {
-    requestData={its:msgData.interval.its, ets:msgData.interval.ets, ul:msgData.user_list}
-    $.ajax({
-        url: '/etc/wg/'+msgData.wid+'/sn/',
-        dataType: 'json',
-        type: 'POST',
-        data: JSON.stringify(requestData),
-    })
-    .done(function (data) {
-        PubSub.publish('barMessage',{message:{type:'success',message:'Snapshot shared successfully'},messageTime:(new Date).getTime()})
-    })
-    .fail(function (data) {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-    })
-}
-
-function processMsgNewWidgetMpSnapshot(msgData) {
-    requestData={its:msgData.interval.its, ets:msgData.interval.ets, ul:msgData.user_list}
-    $.ajax({
-        url: '/etc/wg/'+msgData.wid+'/sn/',
-        dataType: 'json',
-        type: 'POST',
-        data: JSON.stringify(requestData),
-    })
-    .done(function (data) {
-        PubSub.publish('barMessage',{message:{type:'success',message:'Snapshot shared successfully'},messageTime:(new Date).getTime()})
-    })
-    .fail(function (data) {
-        PubSub.publish('barMessage',{message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},messageTime:(new Date).getTime()})
-    })
-}
-
-*/
