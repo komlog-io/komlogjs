@@ -624,7 +624,7 @@ class SnapshotMp extends React.Component {
             });
 
             subscribedTopics.forEach(topic => {
-                this.subscriptionTokens[this.props.nid].push({
+                this.subscriptionTokens.push({
                     token:PubSub.subscribe(topic,this.subscriptionHandler),
                     msg:topic
                 });
