@@ -131,16 +131,17 @@ class SnapshotBar extends React.Component {
         },
         righticonstyle: {
             textShadow: '1px 1px 5px 1px #ccc',
+            align: 'right',
             float: 'right',
             height: '20px',
-            padding: '0px 5px 0px',
-            color: '#aaa',
+            margin: '3px 2px 0px 8px',
         },
         lefticonstyle: {
             textShadow: '1px 1px 5px 1px #ccc',
+            align: 'left',
             float: 'left',
             height: '20px',
-            padding: '0px 5px 0px',
+            margin: '2px 5px 0px 0px',
         },
     };
 
@@ -241,7 +242,8 @@ class SnapshotDs extends React.Component {
             var dateText=dateFormat(date);
             return (
               <div className="ds-info">
-                {dateText}
+                <ReactBootstrap.Glyphicon glyph="time" />
+                {' '}{dateText}
               </div>
             );
         } else {

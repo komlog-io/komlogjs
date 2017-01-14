@@ -332,6 +332,11 @@ a {
     transition: opacity 0.3s;
 }
 
+.Slide:hover .ds-info {
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
 .Slide:hover .visual-bar {
     opacity: 1;
     transition: opacity 0.3s;
@@ -391,13 +396,14 @@ a {
 }
 
 .ds-info {
-  display: inline-block;
-  color: #444;
-  background-color: #eee;
-  border: 1px solid #ccc;
-  border-radius: 2px;
-  margin: 5px;
+  position: absolute;
+  top:0px;
+  right:0px;
+  font-size: 15px;
+  font-weight: bold;
+  margin: 4px 5px 5px 0px;
   padding: 3px;
+  pointer-events: none;
 }
 
 .ds-content {

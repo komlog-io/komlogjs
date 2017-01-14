@@ -159,7 +159,7 @@ class WidgetBar extends React.Component {
             align: 'right',
             float: 'right',
             height: '20px',
-            padding: '5px',
+            margin: '2px 0px 0px 10px',
             color: 'yellow',
             textShadow: '-1px 0 black, 0 1px black, 1px 0 black, 0 -1px black',
         },
@@ -168,14 +168,14 @@ class WidgetBar extends React.Component {
             align: 'right',
             float: 'right',
             height: '20px',
-            padding: '5px',
+            margin: '3px 2px 0px 8px',
         },
         lefticonstyle: {
             textShadow: '1px 1px 5px 1px #ccc',
             align: 'left',
             float: 'left',
             height: '20px',
-            padding: '5px',
+            margin: '2px 5px 0px 0px',
         },
     };
 
@@ -1091,11 +1091,10 @@ class WidgetDs extends React.Component {
             var date = new Date(this.state.timestamp*1000);
             var dateText=dateFormat(date);
             return (
-              <div style={{"textAlign":"center"}}>
                 <div className="ds-info">
-                  {dateText}
+                  <ReactBootstrap.Glyphicon glyph="time" />
+                  {' '}{dateText}
                 </div>
-              </div>
             );
         } else {
             return null;
