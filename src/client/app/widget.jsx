@@ -797,8 +797,8 @@ class WidgetConfigMp extends React.Component {
                 var style={};
                 var glyph="ok";
             }
-            var name = el.datapointname.slice(-60);
-            if (name.length == 60) {
+            var name = el.datapointname.slice(-50);
+            if (name.length == 50) {
                 name = "..."+name;
             }
             return (
@@ -808,7 +808,7 @@ class WidgetConfigMp extends React.Component {
                 </td>
                 <td style={style}>
                   <span style={{backgroundColor:el.color,borderRadius:"2px"}}>&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                  <span> {name}</span>
+                  <span title={el.datapointname}> {name}</span>
                 </td>
               </tr>
             );
@@ -1979,7 +1979,11 @@ class WidgetMp extends React.Component {
         var pids = Object.keys(this.state.config);
         var summary = pids.map( (pid,i) => {
             var color = this.state.config[pid].color;
-            var name = this.state.config[pid].datapointname;
+            var datapointname = this.state.config[pid].datapointname;
+            datapointname = datapointname.slice(-20);
+            if (datapointname.length == 20) {
+                datapointname = "..."+datapointname;
+            }
             var data = this.state.data[pid];
             var numSamples = data.length;
             var summary = {};
@@ -2017,7 +2021,7 @@ class WidgetMp extends React.Component {
               <tr key={i}>
                 <td>
                   <span style={{backgroundColor:color,borderRadius:"2px"}}>&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                  <span> {name}</span>
+                  <span> {datapointname}</span>
                 </td>
                 <td>{summary.max}</td>
                 <td>{summary.min}</td>

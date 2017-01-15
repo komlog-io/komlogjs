@@ -410,12 +410,12 @@ a {
   font-family: "Courier New", Courier, monospace;
   overflow-x: scroll;
   white-space: nowrap;
+  min-height: 270px;
 }
 
-/*.ds-content span {
-  white-space: pre-wrap;
+.datapoint-table {
+  overflow-x: scroll;
 }
-*/
 
 .color-tag {
   display: inline-block;

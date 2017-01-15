@@ -401,7 +401,6 @@ function processMsgMonitorDatapoint (data) {
                 messageTime:(new Date).getTime()
             };
             PubSub.publish(topics.BAR_MESSAGE(),payload);
-            setTimeout(PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:responseData.pid, force:true}),5000);
             setTimeout(PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,{did:requestData.did, force:true}),5000);
             setTimeout(PubSub.publish(topics.DATASOURCE_DATA_REQUEST,{did:requestData.did, force:true}),5000);
         })

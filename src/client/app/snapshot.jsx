@@ -729,10 +729,10 @@ class SnapshotMp extends React.Component {
     }
 
     subscriptionHandler = (msg,data) => {
-        msgType=msg.split('-')[0];
+        var msgType=msg.split('-')[0];
         switch (msgType) {
             case topics.DATAPOINT_DATA_UPDATE():
-                pid=msg.split('-')[1];
+                var pid=msg.split('-')[1];
                 this.refreshData(data.interval, pid);
                 break;
         }
@@ -791,7 +791,11 @@ class SnapshotMp extends React.Component {
         var dps = this.props.datapoints;
         var summary = dps.map( (dp,i) => {
             var color = dp.color;
-            var name = dp.datapointname;
+            var datapointname = dp.datapointname;
+            datapointname = datapointname.slice(-20);
+            if (datapointname.length == 20) {
+                datapointname = "..."+datapointname;
+            }
             var data = this.state.data[dp.pid];
             var numSamples = data.length;
             var summary = {};
@@ -829,7 +833,7 @@ class SnapshotMp extends React.Component {
               <tr key={i}>
                 <td>
                   <span style={{backgroundColor:color,borderRadius:"2px"}}>&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                  <span> {name}</span>
+                  <span> {datapointname}</span>
                 </td>
                 <td>{summary.max}</td>
                 <td>{summary.min}</td>

@@ -348,7 +348,6 @@ let d3Linegraph = {
     },
 
     update: function (el, data, interval, newIntervalCallback) {
-        console.log('data vale',data);
         var mouseIn = null,
             x = null,
             y = null,
@@ -366,13 +365,13 @@ let d3Linegraph = {
             var max_index=0;
             var min_index=null;
             for (var i=0, j=data.length;i<j;i++) {
-                var domainData = data[i].data.filter((d,i) => {
+                var domainData = data[i].data.filter((d,index) => {
                     if (its <= d.ts && d.ts <= ets){
-                        if (i>max_index) {
-                            max_index = i;
+                        if (index>max_index) {
+                            max_index = index;
                         }
                         if (min_index == null || i<min_index) {
-                            min_index = i;
+                            min_index = index;
                         }
                         return true;
                     }
@@ -384,12 +383,13 @@ let d3Linegraph = {
                     domainData.push(data[i].data[min_index-1]);
                 }
                 max_index = 0;
-                min_index = 0;
-                y_values_array.push(d3.min(domainData, d => d.value ));
-                y_values_array.push(d3.max(domainData, d => d.value ));
+                min_index = null;
+                var max = d3.max(domainData, d => d.value );
+                var min = d3.min(domainData, d => d.value );
+                y_values_array.push(min);
+                y_values_array.push(max);
             }
 
-            console.log('update_axis_domains',y_values_array,its,ets);
             var yDomain=d3.extent(y_values_array),
                 yMargin=(yDomain[1]-yDomain[0])*0.1;
             if (yMargin==0) {
@@ -453,7 +453,6 @@ let d3Linegraph = {
             var line = d3.line()
                 .x(d => x(new Date(d.ts*1000)))
                 .y(d => y(d.value));
-            console.log('update_lines',data);
             var lines=svg.selectAll('.line')
                 .data(data, d => d.pid)
 
@@ -677,6 +676,7 @@ let d3Linegraph = {
             var dateText=dateFormat(date)
             var dateRectWidth=(dateText.length+1)*8
             var xOffset=xPos<dateRectWidth/2 ? -xPos : xPos+dateRectWidth/2 > width ? width-xPos-dateRectWidth : -dateRectWidth/2;
+            var yOffset = 0;
             var zoomArea=d3.select(el).select('.zoom-area')
             d3.select(el).select('.date-tooltip')
                 .attr('transform', 'translate('+xPos+',0)');
@@ -696,6 +696,7 @@ let d3Linegraph = {
                     .attr('x',zoomAreaX)
                     .attr('width',Math.abs(initialPos-xPos));
             }
+            var dpBanners = [];
             for (var j=0;j<data.length;j++) {
                 var i = bisectDate(data[j].data, x0,1);
                 i=i<1 ? 1 : i==data[j].data.length ? data[j].data.length -1 : i;
@@ -713,22 +714,69 @@ let d3Linegraph = {
                     var rectWidth=(d.value.toString().length+1)*10;
                 } else {
                     var d = {value:''};
-                    var pointX = -10;
-                    var pointY = -10;
+                    var pointX = -20;
+                    var pointY = -20;
                     var rectWidth = 0
                 }
                 xOffset=pointX+rectWidth+5 > width ? width-pointX-rectWidth-5 : 0;
-                d3.select(el).select("#dp-"+data[j].pid)
-                    .attr("transform", "translate(" + pointX + "," + pointY + ")");
-                d3.select(el).select("#dp-"+data[j].pid)
-                    .select("text")
-                    .attr("transform", "translate("+xOffset+",0)")
-                    .text(d3.format(",")(d.value));
-                d3.select(el).select("#dp-"+data[j].pid)
-                    .select("rect")
-                    .attr("transform", "translate("+xOffset+",0)")
-                    .attr("width", rectWidth);
+                dpBanners.push({pid:data[j].pid, value:d.value, pointX:pointX, pointY:pointY, rectWidth:rectWidth, xOffset:xOffset, yOffset:yOffset});
             }
+            console.log('posiciones banners',dpBanners);
+            dpBanners.sort((a,b) => b.pointY - a.pointY);
+            for (var i=1, j=dpBanners.length; i<j; i++) {
+                var a = dpBanners[i];
+                var b = dpBanners[i-1];
+                var collisionL1 = !(
+                    ((a.pointY + a.yOffset + 20) < (b.pointY)) ||
+                    (a.pointY > (b.pointY + b.yOffset + 20)) ||
+                    ((a.pointX + a.xOffset + a.rectWidth +10) < b.pointX) ||
+                    (a.pointX > (b.pointX + b.rectWidth + b.xOffset +10))
+                    );
+                if (collisionL1) {
+                    // move to left
+                    a.xOffset = -a.rectWidth;
+                    if ((a.pointX + a.xOffset) < 0 ) {
+                        a.xOffset = -a.pointX;
+                        b.xOffset += a.rectWidth-a.pointX;
+                    }
+                    if ((b.pointX + b.rectWidth + 5) > width) {
+                        a.xOffset += width - b.pointX - b.rectWidth - 5;
+                    }
+                }
+                if (i>1) {
+                    var c = dpBanners[i-2];
+                    var collisionL2 = !(
+                        ((a.pointY + a.yOffset + 20) < (c.pointY)) ||
+                        (a.pointY > (c.pointY + c.yOffset + 20)) ||
+                        ((a.pointX + a.xOffset + a.rectWidth) < c.pointX) ||
+                        (a.pointX > (c.pointX + c.rectWidth + c.xOffset))
+                        );
+                    if (collisionL2) {
+                        // move up
+                        a.yOffset = c.pointY - a.pointY - a.yOffset -20;
+                        if ((a.pointY + a.yOffset) < 0) {
+                            a.yOffset = -a.pointY;
+                            c.yOffset += 20 - c.pointY;
+                        }
+                    }
+                }
+            }
+            for (var i=0, j=dpBanners.length; i<j; i++) {
+                var dp = dpBanners[i];
+                d3.select(el).select("#dp-"+dp.pid)
+                    .attr("transform", "translate(" + dp.pointX + "," + dp.pointY + ")");
+                d3.select(el).select("#dp-"+dp.pid)
+                    .select("text")
+                    .attr("font-size","14px")
+                    .attr("font-weight","bold")
+                    .attr("transform", "translate("+dp.xOffset+","+dp.yOffset+")")
+                    .text(d3.format(",")(dp.value));
+                d3.select(el).select("#dp-"+dp.pid)
+                    .select("rect")
+                    .attr("transform", "translate("+dp.xOffset+","+dp.yOffset+")")
+                    .attr("width", dp.rectWidth);
+            }
+
         }
     }
 }
@@ -920,7 +968,6 @@ let d3Histogram = {
             .domain([x_domain[0]-xMargin,x_domain[1]+xMargin]);
         for (var i in data) {
             data[i].histogram = d3.histogram().thresholds(x.ticks(num_ticks))(data[i].values);
-            console.log('histograma',data[i].histogram);
         }
         var y = d3.scaleLinear()
             .domain([0, d3.max(data.map(function(d) { return d3.max(d.histogram, e => e.length)/d.values.length }))])
@@ -1290,6 +1337,7 @@ let d3SummaryLinegraph = {
                     .attr("transform", "translate(" + pointX + "," + pointY + ")");
                 d3.select(el).select("#dp-"+datapoints[j].color.slice(1,datapoints[j].color.length))
                     .select("text")
+                    .attr("font-size","14px")
                     .attr("transform", "translate("+xOffset+",0)")
                     .text(d3.format(",")(d[1]));
                 d3.select(el).select("#dp-"+datapoints[j].color.slice(1,datapoints[j].color.length))
