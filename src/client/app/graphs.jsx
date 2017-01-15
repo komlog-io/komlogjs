@@ -721,7 +721,6 @@ let d3Linegraph = {
                 xOffset=pointX+rectWidth+5 > width ? width-pointX-rectWidth-5 : 0;
                 dpBanners.push({pid:data[j].pid, value:d.value, pointX:pointX, pointY:pointY, rectWidth:rectWidth, xOffset:xOffset, yOffset:yOffset});
             }
-            console.log('posiciones banners',dpBanners);
             dpBanners.sort((a,b) => b.pointY - a.pointY);
             for (var i=1, j=dpBanners.length; i<j; i++) {
                 var a = dpBanners[i];
@@ -1047,6 +1046,7 @@ let d3SummaryLinegraph = {
     create: function (el, datapoints, its, ets) {
         var y_values_array=[];
         for (var i=0, j=datapoints.length; i<j; i++) {
+            datapoints[i].id=i;
             y_values_array.push(d3.min(datapoints[i].data, d => d[1]));
             y_values_array.push(d3.max(datapoints[i].data, d => d[1]));
         }
@@ -1128,7 +1128,7 @@ let d3SummaryLinegraph = {
             .enter()
             .append("g")
             .attr("class", "focus")
-            .attr("id", d => "dp-"+d.color.slice(1,d.color.length))
+            .attr("id", d => "dp-"+d.id)
             .style("opacity", 0);
 
         focus.append("circle")
@@ -1301,6 +1301,7 @@ let d3SummaryLinegraph = {
             var dateText=dateFormat(date);
             var dateRectWidth=(dateText.length+1)*8;
             var xOffset=xPos<dateRectWidth/2 ? -xPos : xPos+dateRectWidth/2 > width ? width-xPos-dateRectWidth : -dateRectWidth/2;
+            var yOffset = 0;
             d3.select(el).select('.date-tooltip')
                 .attr('transform', 'translate('+xPos+',0)');
             d3.select(el).select('.date-tooltip')
@@ -1311,6 +1312,7 @@ let d3SummaryLinegraph = {
                 .select('rect')
                 .attr('transform', 'translate('+xOffset+',0)')
                 .attr('width',dateRectWidth);
+            var dpBanners = [];
             for (var j=0;j<datapoints.length;j++) {
                 var i = bisectDate(datapoints[j].data, x0,1);
                 i=i<1 ? 1 : i==datapoints[j].data.length ? datapoints[j].data.length -1 : i;
@@ -1333,17 +1335,61 @@ let d3SummaryLinegraph = {
                     var rectWidth = 0
                 }
                 xOffset=pointX+rectWidth+5 > width ? width-pointX-rectWidth-5 : 0;
-                d3.select(el).select("#dp-"+datapoints[j].color.slice(1,datapoints[j].color.length))
-                    .attr("transform", "translate(" + pointX + "," + pointY + ")");
-                d3.select(el).select("#dp-"+datapoints[j].color.slice(1,datapoints[j].color.length))
+                dpBanners.push({id:datapoints[j].id, value:d[1], pointX:pointX, pointY:pointY, rectWidth:rectWidth, xOffset:xOffset, yOffset:yOffset});
+            }
+            dpBanners.sort((a,b) => b.pointY - a.pointY);
+            for (var i=1, j=dpBanners.length; i<j; i++) {
+                var a = dpBanners[i];
+                var b = dpBanners[i-1];
+                var collisionL1 = !(
+                    ((a.pointY + a.yOffset + 20) < (b.pointY)) ||
+                    (a.pointY > (b.pointY + b.yOffset + 20)) ||
+                    ((a.pointX + a.xOffset + a.rectWidth +10) < b.pointX) ||
+                    (a.pointX > (b.pointX + b.rectWidth + b.xOffset +10))
+                    );
+                if (collisionL1) {
+                    // move to left
+                    a.xOffset = -a.rectWidth;
+                    if ((a.pointX + a.xOffset) < 0 ) {
+                        a.xOffset = -a.pointX;
+                        b.xOffset += a.rectWidth-a.pointX;
+                    }
+                    if ((b.pointX + b.rectWidth + 5) > width) {
+                        a.xOffset += width - b.pointX - b.rectWidth - 5;
+                    }
+                }
+                if (i>1) {
+                    var c = dpBanners[i-2];
+                    var collisionL2 = !(
+                        ((a.pointY + a.yOffset + 20) < (c.pointY)) ||
+                        (a.pointY > (c.pointY + c.yOffset + 20)) ||
+                        ((a.pointX + a.xOffset + a.rectWidth) < c.pointX) ||
+                        (a.pointX > (c.pointX + c.rectWidth + c.xOffset))
+                        );
+                    if (collisionL2) {
+                        // move up
+                        a.yOffset = c.pointY - a.pointY - a.yOffset -20;
+                        if ((a.pointY + a.yOffset) < 0) {
+                            a.yOffset = -a.pointY;
+                            c.yOffset += 20 - c.pointY;
+                        }
+                    }
+                }
+            }
+            for (var i=0, j=dpBanners.length; i<j; i++) {
+                var dp = dpBanners[i];
+                d3.select(el).select("#dp-"+dp.id)
+                    .attr("transform", "translate(" + dp.pointX + "," + dp.pointY + ")");
+                d3.select(el).select("#dp-"+dp.id)
                     .select("text")
                     .attr("font-size","14px")
-                    .attr("transform", "translate("+xOffset+",0)")
-                    .text(d3.format(",")(d[1]));
-                d3.select(el).select("#dp-"+datapoints[j].color.slice(1,datapoints[j].color.length))
+                    .attr("font-weight","bold")
+                    .attr("transform", "translate("+dp.xOffset+","+dp.yOffset+")")
+                    .text(d3.format(",")(dp.value));
+                d3.select(el).select("#dp-"+dp.id)
                     .select("rect")
-                    .attr("transform", "translate("+xOffset+",0)")
-                    .attr("width", rectWidth);
+                    .attr("transform", "translate("+dp.xOffset+","+dp.yOffset+")")
+                    .attr("width", dp.rectWidth);
             }
           }
     }
