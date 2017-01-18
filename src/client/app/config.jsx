@@ -7,7 +7,9 @@ import 'bootstrap/dist/css/bootstrap.css';
 import './css/style.css';
 
 
-render (<UserHeader />, document.getElementById('user-header'));
-render (<AlertArea className='alert-area' />, document.getElementById('alert-area'));
-render (<ConfigMenu />, document.getElementById('config-menu'));
+document.addEventListener("DOMContentLoaded", function(event) {
+    render (<UserHeader />, document.getElementById('user-header'));
+    render (<AlertArea className='alert-area' />, document.getElementById('alert-area'));
+    render (<ConfigMenu />, document.getElementById('config-menu'));
+});
 

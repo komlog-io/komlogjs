@@ -1,4 +1,8 @@
 
+body {
+    padding-bottom: 80px;
+}
+
 .navbar-nav a {
     color: white;
     font-size: 15px;
@@ -81,11 +85,6 @@
   background-color: #262B33;
 }
 
-.main-content {
-  padding-top: 80px;
-  padding-bottom: 40px;
-}
-
 .form-invite button,
 .form-invite .form-group .form-control{
       margin-top: 15px;
@@ -104,3 +103,4 @@
   background-position: right center;
   background-repeat: no-repeat;
 }
+

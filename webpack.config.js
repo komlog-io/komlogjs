@@ -7,6 +7,11 @@ var APP_DIR = path.resolve(__dirname, 'src/client/app');
 var config = {
   entry: {
       'root': APP_DIR + '/root.jsx',
+      'forget': APP_DIR + '/forget.jsx',
+      'signin': APP_DIR + '/signin.jsx',
+      'signup': APP_DIR + '/signup.jsx',
+      'invite': APP_DIR + '/invite.jsx',
+      'p_base': APP_DIR + '/p_base.js',
       'home': ['babel-polyfill',APP_DIR + '/index.jsx'],
       'config': ['babel-polyfill', APP_DIR + '/config.jsx']
   },
