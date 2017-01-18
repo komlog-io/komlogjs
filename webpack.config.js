@@ -11,6 +11,7 @@ var config = {
       'signin': APP_DIR + '/signin.jsx',
       'signup': APP_DIR + '/signup.jsx',
       'invite': APP_DIR + '/invite.jsx',
+      'terms': APP_DIR + '/terms.jsx',
       'p_base': APP_DIR + '/p_base.js',
       'home': ['babel-polyfill',APP_DIR + '/index.jsx'],
       'config': ['babel-polyfill', APP_DIR + '/config.jsx']
@@ -23,7 +24,9 @@ var config = {
   plugins: [],
   module : {
     loaders : [
-      { test : /\.jsx?/, include : APP_DIR, loader : 'babel' },
+      { test: /\.json$/, loader: 'json' },
+      { test: /\.md$/, loader: 'file' },
+      { test: /\.jsx?/, include : APP_DIR, loader : 'babel' },
       { test: /\.css$/, exclude: /\.useable\.css$/, loader: "style-loader!css-loader" },
       { test: /\.useable\.css$/, loader: "style-loader/useable!css-loader" },
       { test: /\.eot(\?v=\d+\.\d+\.\d+)?$/, loader: "file" },
