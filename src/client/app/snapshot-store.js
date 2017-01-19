@@ -1,6 +1,7 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
 import {topics} from './types.js';
+import {getCookie} from './utils.js';
 
 class SnapshotStore {
     constructor () {
@@ -106,6 +107,9 @@ class SnapshotStore {
                     url: '/etc/ds/'+did,
                     dataType: 'json',
                     type: 'DELETE',
+                    beforeSend: function(request) {
+                        request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+                    },
                 })
                 .done( data => {
                     if (this._lastConfigUpdate.hasOwnProperty(nid)) {

@@ -2,6 +2,7 @@ import * as d3 from 'd3';
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
 import {topics} from './types.js';
+import {getCookie} from './utils.js';
 
 class DatapointStore {
     constructor () {
@@ -349,7 +350,6 @@ class DatapointStore {
             reqArray[0].intervalsRequested=intervals;
         }
     }
-
 }
 
 
@@ -386,16 +386,25 @@ function processMsgLoadDatapointSlide (msgData) {
     }
 }
 
-function processMsgMonitorDatapoint (data) {
-    if (data.hasOwnProperty('did') && data.hasOwnProperty('seq') && data.hasOwnProperty('p') && data.hasOwnProperty('l') && data.hasOwnProperty('datapointname')) {
-        var requestData = {did:data.did,seq:data.seq,p:data.p,l:data.l,datapointname:data.datapointname};
+function processMsgMonitorDatapoint (msgData) {
+    if (msgData.hasOwnProperty('did') && msgData.hasOwnProperty('seq') && msgData.hasOwnProperty('p') && msgData.hasOwnProperty('l') && msgData.hasOwnProperty('datapointname')) {
+        var requestData = {
+            did:msgData.did,
+            seq:msgData.seq,
+            p:msgData.p,
+            l:msgData.l,
+            datapointname:msgData.datapointname
+        };
         $.ajax({
             url: '/etc/dp/',
             dataType: 'json',
             type: 'POST',
             data: JSON.stringify(requestData),
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         })
-        .done( responseData=> {
+        .done( data => {
             var payload = {
                 message:{type:'success', message:'New datapoint monitored'},
                 messageTime:(new Date).getTime()
@@ -404,9 +413,16 @@ function processMsgMonitorDatapoint (data) {
             setTimeout(PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,{did:requestData.did, force:true}),5000);
             setTimeout(PubSub.publish(topics.DATASOURCE_DATA_REQUEST,{did:requestData.did, force:true}),5000);
         })
-        .fail( responseData=> {
+        .fail( data => {
+            if (data.responseJSON && data.responseJSON.error) {
+                var message = 'Error registering datapoint. Code: '+data.responseJSON.error;
+            } else if (data.statusText) {
+                var message = 'Error registering datapoint. '+data.statusText;
+            } else {
+                var message = 'Error registering datapoint.';
+            }
             var payload = {
-                message:{type:'danger', message:'Error monitoring new datapoint. Code: '+responseData.responseJSON.error},
+                message:{type:'danger',message:message},
                 messageTime:(new Date).getTime()
             };
             PubSub.publish(topics.BAR_MESSAGE(),payload);
@@ -414,27 +430,44 @@ function processMsgMonitorDatapoint (data) {
     }
 }
 
-function processMsgMarkPositiveVar (data) {
-    if (data.hasOwnProperty('pid') && data.hasOwnProperty('seq') && data.hasOwnProperty('p') && data.hasOwnProperty('l')) {
-        var requestData={seq:data.seq,p:data.p,l:data.l};
+function processMsgMarkPositiveVar (msgData) {
+    if (msgData.hasOwnProperty('pid') && msgData.hasOwnProperty('seq') && msgData.hasOwnProperty('p') && msgData.hasOwnProperty('l')) {
+        var requestData={seq:msgData.seq,p:msgData.p,l:msgData.l};
         $.ajax({
-            url: '/etc/dp/'+data.pid+'/positives/',
+            url: '/etc/dp/'+msgData.pid+'/positives/',
             dataType: 'json',
             type: 'POST',
             data: JSON.stringify(requestData),
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         })
-        .done( responseData => {
-            setTimeout(PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:data.pid, force:true}),5000);
-            setTimeout(PubSub.publish(topics.DATAPOINT_DATA_REQUEST,{pid:data.pid}),5000);
+        .done( data => {
+            setTimeout(PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:msgData.pid, force:true}),5000);
+            setTimeout(PubSub.publish(topics.DATAPOINT_DATA_REQUEST,{pid:msgData.pid}),5000);
             var dpPromise = datapointStore.getConfig({pid:pid});
-            dpPromise.then( data => {
-                if (data.hasOwnProperty('did')) {
+            dpPromise.then( config => {
+                if (config.hasOwnProperty('did')) {
                     setTimeout(PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,
-                    {did:datapointConfig.did, force:true}),5000);
+                    {did:config.did, force:true}),5000);
                     setTimeout(PubSub.publish(topics.DATASOURCE_DATA_REQUEST,
-                    {did:datapointConfig.did, force:true}),5000);
+                    {did:config.did, force:true}),5000);
                 }
             });
+        })
+        .fail( data => {
+            if (data.responseJSON && data.responseJSON.error) {
+                var message = 'Error requesting operation. Code: '+data.responseJSON.error;
+            } else if (data.statusText) {
+                var message = 'Error requesting operation. '+data.statusText;
+            } else {
+                var message = 'Error requesting operation.';
+            }
+            var payload = {
+                message:{type:'danger',message:message},
+                messageTime:(new Date).getTime()
+            };
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
         });
     }
 }
@@ -442,19 +475,29 @@ function processMsgMarkPositiveVar (data) {
 function processMsgDeleteDatapoint(msgData) {
     if (msgData.hasOwnProperty('pid')) {
         $.ajax({
-                url: '/etc/dp/'+msgData.pid,
-                dataType: 'json',
-                type: 'DELETE',
-            })
-            .then( data => {
-                datapointStore.deleteRegisteredRequest(msgData.pid,'requestDatapointData');
-            }, data => {
-                var payload = {
-                    message:{type:'danger', message:'Error deleting datapoint. Code: '+data.responseJSON.error},
-                    messageTime:(new Date).getTime()
-                };
-                PubSub.publish(topics.BAR_MESSAGE(),payload);
-            });
+            url: '/etc/dp/'+msgData.pid,
+            dataType: 'json',
+            type: 'DELETE',
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
+        })
+        .then( data => {
+            datapointStore.deleteRegisteredRequest(msgData.pid,'requestDatapointData');
+        }, data => {
+            if (data.responseJSON && data.responseJSON.error) {
+                var message = 'Error deleting datapoint. Code: '+data.responseJSON.error;
+            } else if (data.statusText) {
+                var message = 'Error deleting datapoint. '+data.statusText;
+            } else {
+                var message = 'Error deleting datapoint.';
+            }
+            var payload = {
+                message:{type:'danger',message:message},
+                messageTime:(new Date).getTime()
+            };
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
+        });
     }
 }
 
@@ -466,11 +509,21 @@ function processMsgModifyDatapoint(msgData) {
             dataType: 'json',
             type: 'PUT',
             data: JSON.stringify(requestData),
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         }).then( data => {
             PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:msgData.pid, force:true});
         }, data => {
+            if (data.responseJSON && data.responseJSON.error) {
+                var message = 'Error updating datapoint. Code: '+data.responseJSON.error;
+            } else if (data.statusText) {
+                var message = 'Error updating datapoint. '+data.statusText;
+            } else {
+                var message = 'Error updating datapoint.';
+            }
             var payload = {
-                message:{type:'danger', message:'Error updating datapoint. Code: '+data.responseJSON.error},
+                message:{type:'danger',message:message},
                 messageTime:(new Date).getTime()
             };
             PubSub.publish(topics.BAR_MESSAGE(), payload);

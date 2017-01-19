@@ -68,6 +68,26 @@ a {
   font-size: 16px;
 }
 
+@media (max-width: 767px) {
+  #user-header .dropdown {
+    text-align: right;
+  }
+
+  #user-header .dropdown-menu {
+    text-align: right;
+  }
+}
+
+@media (max-height: 767px) {
+  #user-header .dropdown {
+    text-align: right;
+  }
+
+  #user-header .dropdown-menu {
+    text-align: right;
+  }
+}
+
 /*
  * Sidebar
  */
@@ -827,7 +847,7 @@ a {
              */
 
 .alert-area {
-    z-index: 1000;
+    z-index: 1050;
     width: 100%;
     position: fixed;
     top:0;

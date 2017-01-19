@@ -1,6 +1,7 @@
 import $ from 'jquery';
 import PubSub from 'pubsub-js';
 import {topics} from './types.js';
+import {getCookie} from './utils.js';
 
 class EventStore {
     constructor () {
@@ -175,11 +176,25 @@ function processMsgDeleteEvent(msgData) {
                 url: '/var/usr/ev/'+msgData.seq,
                 dataType: 'json',
                 type: 'DELETE',
+                beforeSend: function(request) {
+                    request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+                },
             })
             .then( data => {
                 eventStore.deleteEvent(msgData.seq);
             }, data => {
-                console.log('server Delete Event error',data);
+                if (data.responseJSON && data.responseJSON.error) {
+                    var message = 'Error deleting event. Code: '+data.responseJSON.error;
+                } else if (data.statusText) {
+                    var message = 'Error deleting event. '+data.statusText;
+                } else {
+                    var message = 'Error deleting event.';
+                }
+                var payload = {
+                    message:{type:'danger',message:message},
+                    messageTime:(new Date).getTime()
+                };
+                PubSub.publish(topics.BAR_MESSAGE(),payload);
             });
     }
 }
@@ -191,6 +206,9 @@ function sendEventResponse(seq, responseData) {
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify(responseData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         var payload = {
@@ -200,8 +218,15 @@ function sendEventResponse(seq, responseData) {
         PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error sending response. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error sending response. '+data.statusText;
+        } else {
+            var message = 'Error sending response.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error sending response. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);

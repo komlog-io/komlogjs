@@ -1,6 +1,7 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
 import {topics} from './types.js';
+import {getCookie} from './utils.js';
 
 class WidgetStore {
     constructor () {
@@ -49,7 +50,6 @@ class WidgetStore {
                 processMsgNewWidgetDpSnapshot(data);
                 break;
             case topics.NEW_WIDGET_MP_SNAPSHOT:
-                console.log('mensaje recibido',msg,data);
                 processMsgNewWidgetMpSnapshot(data);
                 break;
         }
@@ -82,7 +82,6 @@ class WidgetStore {
                     var result = this.storeConfig(wid, data);
                     this.updateLastConfigUpdate(wid);
                     if (result.modified == true) {
-                        console.log('mandando actualizacion de widget',wid);
                         var topic = topics.WIDGET_CONFIG_UPDATE(wid);
                         PubSub.publish(topic,wid);
                     }
@@ -131,19 +130,32 @@ function processMsgWidgetConfigRequest(msgData) {
 }
 
 function processMsgNewWidget(msgData) {
-    var requestData={type:msgData.type,widgetname:msgData.widgetname};
+    var requestData={
+        type:msgData.type,
+        widgetname:msgData.widgetname
+    };
     $.ajax({
         url: '/etc/wg/',
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify(requestData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         PubSub.publish(topics.LOAD_SLIDE,{wid:data.wid});
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error creating graph. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error creating graph. '+data.statusText;
+        } else {
+            var message = 'Error creating graph.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error creating graph. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(),payload);
@@ -158,6 +170,9 @@ function processMsgModifyWidget(msgData) {
             dataType: 'json',
             type: 'PUT',
             data: JSON.stringify(requestData),
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         });
     }
     var addDatapoint = (pid) => {
@@ -165,6 +180,9 @@ function processMsgModifyWidget(msgData) {
             url: '/etc/wg/'+msgData.wid+'/dp/'+pid,
             dataType: 'json',
             type: 'POST',
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         });
     }
     var deleteDatapoint = (pid) => {
@@ -172,9 +190,13 @@ function processMsgModifyWidget(msgData) {
             url: '/etc/wg/'+msgData.wid+'/dp/'+pid,
             dataType: 'json',
             type: 'DELETE',
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         });
     }
     var endModify = () => {
+        console.log('entro a endModify');
         PubSub.publish(topics.WIDGET_CONFIG_REQUEST,{wid:msgData.wid,force:true});
     }
     var requests=[];
@@ -212,7 +234,22 @@ function processMsgModifyWidget(msgData) {
         }
     }
     if (chainRequests.length>0) {
-        chainRequests[chainRequests.length-1].then(endModify());
+        chainRequests[chainRequests.length-1].then(
+            endModify)
+            .fail( data => {
+                if (data.responseJSON && data.responseJSON.error) {
+                    var message = 'Error modifying widget. Code: '+data.responseJSON.error;
+                } else if (data.statusText) {
+                    var message = 'Error modifying widget. '+data.statusText;
+                } else {
+                    var message = 'Error modifying widget.';
+                }
+                var payload = {
+                    message:{type:'danger',message:message},
+                    messageTime:(new Date).getTime()
+                }
+                PubSub.publish(topics.BAR_MESSAGE(),payload);
+            });
     }
 }
 
@@ -222,13 +259,23 @@ function processMsgDeleteWidget(msgData) {
             url: '/etc/wg/'+msgData.wid,
             dataType: 'json',
             type: 'DELETE',
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         })
         .then( data => {
         }, data => {
+            if (data.responseJSON && data.responseJSON.error) {
+                var message = 'Error deleting widget. Code: '+data.responseJSON.error;
+            } else if (data.statusText) {
+                var message = 'Error deleting widget. '+data.statusText;
+            } else {
+                var message = 'Error deleting widget.';
+            }
             var payload = {
-                message:{type:'danger',message:'Error deleting widget. Code: '+data.responseJSON.error},
+                message:{type:'danger',message:message},
                 messageTime:(new Date).getTime()
-            };
+            }
             PubSub.publish(topics.BAR_MESSAGE(),payload);
         });
     }
@@ -241,6 +288,9 @@ function processMsgNewWidgetDsSnapshot(msgData) {
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify(requestData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         var payload = {
@@ -250,8 +300,15 @@ function processMsgNewWidgetDsSnapshot(msgData) {
         PubSub.publish(topics.BAR_MESSAGE(),payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error sharing. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error sharing. '+data.statusText;
+        } else {
+            var message = 'Error sharing.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(),payload);
@@ -265,6 +322,9 @@ function processMsgNewWidgetDpSnapshot(msgData) {
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify(requestData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         var payload = {
@@ -274,8 +334,15 @@ function processMsgNewWidgetDpSnapshot(msgData) {
         PubSub.publish(topics.BAR_MESSAGE(),payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error sharing. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error sharing. '+data.statusText;
+        } else {
+            var message = 'Error sharing.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(),payload);
@@ -289,6 +356,9 @@ function processMsgNewWidgetMpSnapshot(msgData) {
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify(requestData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         var payload = {
@@ -298,8 +368,15 @@ function processMsgNewWidgetMpSnapshot(msgData) {
         PubSub.publish(topics.BAR_MESSAGE(),payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error sharing. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error sharing. '+data.statusText;
+        } else {
+            var message = 'Error sharing.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error creating snapshot. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(),payload);

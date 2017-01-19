@@ -32,25 +32,25 @@ class Footer extends React.Component {
                 <div className="col-xs-6">
                   <ul>
                     <li>
-                      <a href="/privacy"><small>Privacy policy</small></a>
+                      <a href="/terms"><small>Terms and conditions</small></a>
                     </li>
                     <li>
-                      <a href="/terms"><small>Terms and conditions</small></a>
+                      <a href="/privacy"><small>Privacy policy</small></a>
                     </li>
                   </ul>
                 </div>
                 <div className="col-xs-6">
                   <ul style={{textAlign:'right'}}>
                     <li>
-                      <a className="mail" href="mailto:hello@komlog.io"></a>
-                      <a className="twitter" href="https://www.twitter.com/komlog_"></a>
-                    </li>
-                    <li>
                       <small>
                         Made with{' '}
                         <span className="glyphicon glyphicon-heart text-danger"></span>
                         {' '}by <strong>Komlog</strong>
                       </small>
+                    </li>
+                    <li>
+                      <a className="mail" href="mailto:hello@komlog.io"></a>
+                      <a className="twitter" href="https://www.twitter.com/komlog_"></a>
                     </li>
                   </ul>
                 </div>
@@ -160,7 +160,6 @@ class Forget extends React.Component {
             newState.code = codeEl.textContent;
             newState.msg = msgEl.innerHTML
         }
-        console.log(newState);
         this.setState (newState);
     }
 
@@ -218,7 +217,6 @@ class Forget extends React.Component {
     }
 
     handlePassword = (event) => {
-        console.log('handle',event.target.id);
         var newState = {};
         if (event.target.id == "password") {
             newState.password1=event.target.value;
@@ -326,11 +324,9 @@ class SignIn extends React.Component {
         var banner = null;
         var codeEl=document.getElementById("rescode");
         var msgEl = document.getElementById("resmsg");
-        console.log('signin',codeEl,msgEl);
         if (codeEl && msgEl) {
             var code = codeEl.textContent;
             var msg = <div dangerouslySetInnerHTML={{__html:msgEl.innerHTML}} />;
-            console.log('respuesta',code,msgEl.innerHTML);
             if (code == '200') {
                 var banner = <div style={{maxWidth:'600px'}} className="alert alert-success center-block text-center" role="alert">{msg}</div>;
             } else {

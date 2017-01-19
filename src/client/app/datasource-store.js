@@ -1,6 +1,7 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
 import {topics} from './types.js';
+import {getCookie} from './utils.js';
 
 class DatasourceStore {
     constructor () {
@@ -315,6 +316,9 @@ class DatasourceStore {
                     url: '/etc/ds/'+did,
                     dataType: 'json',
                     type: 'DELETE',
+                    beforeSend: function(request) {
+                        request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+                    },
                 })
                 .then( data => {
                     this.deleteRegisteredRequest(msgData.did,'requestDatasourceData');
@@ -333,11 +337,18 @@ class DatasourceStore {
                     response = {success:true};
                     resolve(response);
                 }, data => {
-                    response = {success:false, code: data.responseJSON.error};
+                    if (data.responseJSON && data.responseJSON.error) {
+                        var message = 'Error deleting datasource. Code: '+data.responseJSON.error;
+                    } else if (data.statusText) {
+                        var message = 'Error deleting datasource. '+data.statusText;
+                    } else {
+                        var message = 'Error deleting datasource.';
+                    }
+                    response = {success:false, message: message};
                     resolve(response);
                 });
             } else {
-                response = {success:false, code:'did invalid'};
+                response = {success:false, message:'did invalid'};
                 reject(response);
             }
         });
@@ -399,7 +410,7 @@ function processMsgDeleteDatasource(msgData) {
                 };
             } else {
                 var payload = {
-                    message:{type:'danger',message:'Error deleting datasource. Code: '+data.responseJSON.error},
+                    message:{type:'danger',message:response.message},
                     messageTime:(new Date).getTime()
                 };
             }

@@ -1,6 +1,7 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
 import {topics} from './types.js';
+import {getCookie} from './utils.js';
 
 class DashboardStore {
     constructor () {
@@ -159,6 +160,9 @@ function processMsgNewDashboard (msgData) {
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify(requestData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         PubSub.publish(topics.DASHBOARD_CONFIG_REQUEST,{bid:data.bid})
@@ -169,8 +173,15 @@ function processMsgNewDashboard (msgData) {
         PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error creating dashboard. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error creating dashboard. '+data.statusText;
+        } else {
+            var message = 'Error creating dashboard.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error creating dashboard. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -185,6 +196,9 @@ function processMsgModifyDashboard (msgData) {
             dataType: 'json',
             type: 'PUT',
             data: JSON.stringify(requestData),
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         });
     }
     var addWidget = wid => {
@@ -192,6 +206,9 @@ function processMsgModifyDashboard (msgData) {
             url: '/etc/db/'+msgData.bid+'/wg/'+wid,
             dataType: 'json',
             type: 'POST',
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         });
     }
     var deleteWidget = wid => {
@@ -199,6 +216,9 @@ function processMsgModifyDashboard (msgData) {
             url: '/etc/db/'+msgData.bid+'/wg/'+wid,
             dataType: 'json',
             type: 'DELETE',
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         });
     }
     var endModify = () => {
@@ -239,7 +259,22 @@ function processMsgModifyDashboard (msgData) {
         }
     }
     if (chainRequests.length>0) {
-        chainRequests[chainRequests.length-1].then(endModify())
+        chainRequests[chainRequests.length-1].then(
+            endModify)
+            .fail( data => {
+                if (data.responseJSON && data.responseJSON.error) {
+                    var message = 'Error modifying dashboard. Code: '+data.responseJSON.error;
+                } else if (data.statusText) {
+                    var message = 'Error modifying dashboard. '+data.statusText;
+                } else {
+                    var message = 'Error modifying dashboard.';
+                }
+                var payload = {
+                    message:{type:'danger',message:message},
+                    messageTime:(new Date).getTime()
+                }
+                PubSub.publish(topics.BAR_MESSAGE(),payload);
+            });
     }
 }
 
@@ -249,12 +284,22 @@ function processMsgDeleteDashboard (msgData) {
             url: '/etc/db/'+msgData.bid,
             dataType: 'json',
             type: 'DELETE',
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         })
         .then( data => {
             PubSub.publish(topics.DASHBOARD_CONFIG_UPDATE(msgData.bid),{bid:msgData.bid});
         }, data => {
+            if (data.responseJSON && data.responseJSON.error) {
+                var message = 'Error deleting dashboard. Code: '+data.responseJSON.error;
+            } else if (data.statusText) {
+                var message = 'Error deleting dashboard. '+data.statusText;
+            } else {
+                var message = 'Error deleting dashboard.';
+            }
             var payload = {
-                message:{type:'danger',message:'Error deleting dashboard. Code: '+data.responseJSON.error},
+                message:{type:'danger',message:message},
                 messageTime:(new Date).getTime()
             };
             PubSub.publish(topics.BAR_MESSAGE(),payload);

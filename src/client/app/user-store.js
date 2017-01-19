@@ -1,6 +1,7 @@
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
 import {topics} from './types.js';
+import {getCookie} from './utils.js';
 
 class UserStore {
     constructor () {
@@ -201,6 +202,9 @@ function updateUserPassword (old_password, new_password, new_password2, callback
             dataType: 'json',
             type: 'PUT',
             data: JSON.stringify(requestData),
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         })
         .done( data => {
             var payload = {
@@ -211,8 +215,15 @@ function updateUserPassword (old_password, new_password, new_password2, callback
             callback();
         })
         .fail( data => {
+            if (data.responseJSON && data.responseJSON.error) {
+                var message = 'Error updating password. Code: '+data.responseJSON.error;
+            } else if (data.statusText) {
+                var message = 'Error updating password. '+data.statusText;
+            } else {
+                var message = 'Error updating password.';
+            }
             var payload = {
-                message:{type:'danger',message:'Error updating password. Code: '+data.responseJSON.error},
+                message:{type:'danger',message:message},
                 messageTime:(new Date).getTime()
             };
             PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -233,6 +244,9 @@ function deleteUser () {
         url: url,
         dataType: 'json',
         type: 'DELETE',
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         var payload = {
@@ -243,8 +257,15 @@ function deleteUser () {
         setTimeout(() => {window.location.href = "/";}, 2000);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error deleting user. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error deleting user. '+data.statusText;
+        } else {
+            var message = 'Error deleting user.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error deleting user. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -257,6 +278,9 @@ function deleteKey (key) {
         url: url,
         dataType: 'json',
         type: 'DELETE',
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         userStore.getMyAuthorizedKeysConfig();
@@ -267,8 +291,15 @@ function deleteKey (key) {
         PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error deleting key. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error deleting key. '+data.statusText;
+        } else {
+            var message = 'Error deleting key.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error deleting key. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -281,6 +312,9 @@ function suspendKey (key) {
         url: url,
         dataType: 'json',
         type: 'POST',
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         userStore.getMyAuthorizedKeysConfig();
@@ -291,8 +325,15 @@ function suspendKey (key) {
         PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error suspending key. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error suspending key. '+data.statusText;
+        } else {
+            var message = 'Error suspending key.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error suspending key. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -305,6 +346,9 @@ function activateKey (key) {
         url: url,
         dataType: 'json',
         type: 'POST',
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         userStore.getMyAuthorizedKeysConfig();
@@ -315,8 +359,15 @@ function activateKey (key) {
         PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error activating key. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error activating key. '+data.statusText;
+        } else {
+            var message = 'Error activating key.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error activating key. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -324,7 +375,6 @@ function activateKey (key) {
 }
 
 function newKey (title, pubkey) {
-    console.log('new key',title,pubkey);
     var requestData={
         agentname:title,
         pubkey:btoa(unescape(encodeURIComponent(pubkey))),
@@ -336,6 +386,9 @@ function newKey (title, pubkey) {
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify(requestData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         userStore.getMyAuthorizedKeysConfig();
@@ -346,8 +399,15 @@ function newKey (title, pubkey) {
         PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error adding key. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error adding key. '+data.statusText;
+        } else {
+            var message = 'Error adding key.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error adding key. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -363,6 +423,9 @@ function upgradePlan(data, callback) {
             dataType: 'json',
             type: 'PUT',
             data: JSON.stringify(requestData),
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
         })
         .done( response => {
             userStore.getMyPlanConfig();
@@ -374,8 +437,15 @@ function upgradePlan(data, callback) {
             PubSub.publish(topics.BAR_MESSAGE(), payload);
         })
         .fail( response => {
+            if (response.responseJSON && response.responseJSON.error) {
+                var message = 'Error modifying user\'s plan. Code: '+response.responseJSON.error;
+            } else if (response.statusText) {
+                var message = 'Error modifying user\'s plan. '+response.statusText;
+            } else {
+                var message = 'Error modifying user\'s plan.';
+            }
             var payload = {
-                message:{type:'danger',message:'Error modifying user plan. Code: '+response.responseJSON.error},
+                message:{type:'danger',message:message},
                 messageTime:(new Date).getTime()
             };
             PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -402,6 +472,9 @@ function upgradePlan(data, callback) {
                     dataType: 'json',
                     type: 'PUT',
                     data: JSON.stringify(requestData),
+                    beforeSend: function(request) {
+                        request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+                    },
                 })
                 .done( response => {
                     userStore.getMyPlanConfig();
@@ -413,8 +486,15 @@ function upgradePlan(data, callback) {
                     PubSub.publish(topics.BAR_MESSAGE(), payload);
                 })
                 .fail( response => {
+                    if (response.responseJSON && response.responseJSON.error) {
+                        var message = 'Error modifying user\'s plan. Code: '+response.responseJSON.error;
+                    } else if (response.statusText) {
+                        var message = 'Error modifying user\'s plan. '+response.statusText;
+                    } else {
+                        var message = 'Error modifying user\'s plan.';
+                    }
                     var payload = {
-                        message:{type:'danger',message:'Error modifying user plan. Code: '+response.responseJSON.error},
+                        message:{type:'danger',message:message},
                         messageTime:(new Date).getTime()
                     };
                     PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -437,6 +517,9 @@ function deleteSharedUri(uri,user) {
         dataType: 'json',
         type: 'DELETE',
         data: JSON.stringify(requestData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         userStore.getMySharedUrisConfig();
@@ -452,8 +535,15 @@ function deleteSharedUri(uri,user) {
         PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error unsharing uri. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error unsharing uri. '+data.statusText;
+        } else {
+            var message = 'Error unsharing uri.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error unsharing uri. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);
@@ -468,6 +558,9 @@ function shareNewUri(uri,users) {
         dataType: 'json',
         type: 'POST',
         data: JSON.stringify(requestData),
+        beforeSend: function(request) {
+            request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+        },
     })
     .done( data => {
         userStore.getMySharedUrisConfig();
@@ -479,8 +572,15 @@ function shareNewUri(uri,users) {
         PubSub.publish(topics.BAR_MESSAGE(), payload);
     })
     .fail( data => {
+        if (data.responseJSON && data.responseJSON.error) {
+            var message = 'Error sharing uri. Code: '+data.responseJSON.error;
+        } else if (data.statusText) {
+            var message = 'Error sharing uri. '+data.statusText;
+        } else {
+            var message = 'Error sharing uri.';
+        }
         var payload = {
-            message:{type:'danger',message:'Error sharing uri. Code: '+data.responseJSON.error},
+            message:{type:'danger',message:message},
             messageTime:(new Date).getTime()
         };
         PubSub.publish(topics.BAR_MESSAGE(), payload);
