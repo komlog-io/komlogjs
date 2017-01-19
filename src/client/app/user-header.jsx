@@ -77,15 +77,15 @@ class UserHeader extends React.Component {
             return null;
         }
         return (
-          <ReactBootstrap.Nav pullRight={true}>
-            <ReactBootstrap.NavDropdown id="dropdown" noCaret={true} pullRight={true} title={this.state.username}>
+          <ReactBootstrap.Nav pullRight>
+            <ReactBootstrap.NavDropdown id="dropdown" style={{paddingLeft:'20px'}} pullRight title={this.state.username}>
               <ReactBootstrap.MenuItem key={1} href="/config">
                 <span>
                   <ReactBootstrap.Glyphicon glyph="cog" />
                   {' '}Settings
                 </span>
               </ReactBootstrap.MenuItem>
-              <ReactBootstrap.MenuItem divider={true} />
+              <ReactBootstrap.MenuItem divider />
               <ReactBootstrap.MenuItem key={2} href="/logout">
                 <span>
                   <ReactBootstrap.Glyphicon glyph="log-out" />
@@ -101,8 +101,13 @@ class UserHeader extends React.Component {
         var userMenu = this.getUserMenu();
 
         return (
-          <ReactBootstrap.Navbar staticTop={true} fluid={true}>
-          {userMenu}
+          <ReactBootstrap.Navbar staticTop fluid>
+            <ReactBootstrap.Navbar.Header>
+              <ReactBootstrap.Navbar.Toggle />
+            </ReactBootstrap.Navbar.Header>
+            <ReactBootstrap.Navbar.Collapse>
+              {userMenu}
+            </ReactBootstrap.Navbar.Collapse>
           </ReactBootstrap.Navbar>
         );
     }

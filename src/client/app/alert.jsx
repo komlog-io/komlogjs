@@ -30,7 +30,7 @@ class Alert extends React.Component {
 
     componentDidMount = () => {
         if (this.props.autoCloseable) {
-            this.dismissTimer = setTimeout(this.dismiss, 3000);
+            this.dismissTimer = setTimeout(this.dismiss, 4000);
         }
     }
 
@@ -38,7 +38,7 @@ class Alert extends React.Component {
         if (nextProps.messageTime>this.state.messageTime) {
             clearTimeout(this.dismissTimer);
             if (nextProps.autoCloseable == true) {
-                this.dismissTimer = setTimeout(this.dismiss, 3000);
+                this.dismissTimer = setTimeout(this.dismiss, 4000);
             }
             this.setState({message:nextProps.message, type:nextProps.type, messageTime:nextProps.messageTime});
         }

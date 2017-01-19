@@ -3,15 +3,10 @@ import * as ReactBootstrap from 'react-bootstrap';
 
 
 class Header extends React.Component {
-    handleSelect = (e) => {
-        e.preventDefault();
-        console.log('me cago en todo reactBootstrap',e);
-    }
-
     render () {
         var brand = "_< Komlog";
         return (
-          <ReactBootstrap.Navbar inverse staticTop>
+          <ReactBootstrap.Navbar inverse staticTop fluid>
             <ReactBootstrap.Navbar.Header>
               <ReactBootstrap.Navbar.Brand>
                 <a href="/">{brand}</a>
@@ -32,29 +27,35 @@ class Header extends React.Component {
 class Footer extends React.Component {
     render () {
         return (
-          <div className="navbar navbar-default navbar-fixed-bottom">
+          <footer>
             <div className="container">
-              <ul className="nav navbar-nav">
-                <li>
-                  <a href="/terms"><small>Terms and conditions</small></a>
-                </li>
-                <li>
-                  <a href="/privacy"><small>Privacy policy</small></a>
-                </li>
-              </ul>
-              <ul className="nav navbar-nav navbar-right">
-                <li>
-                  <a href="mailto:hello@komlog.io"><strong>hello@komlog.io</strong></a>
-                </li>
-                <li className="navbar-text">
-                    <small>Made with{' '}
-                      <span className="glyphicon glyphicon-heart text-danger"></span>
-                      {' '}by <strong>Komlog</strong>
-                    </small>
-                </li>
-              </ul>
+                <div className="col-xs-6">
+                  <ul>
+                    <li>
+                      <a href="/privacy"><small>Privacy policy</small></a>
+                    </li>
+                    <li>
+                      <a href="/terms"><small>Terms and conditions</small></a>
+                    </li>
+                  </ul>
+                </div>
+                <div className="col-xs-6">
+                  <ul style={{textAlign:'right'}}>
+                    <li>
+                      <a className="mail" href="mailto:hello@komlog.io"></a>
+                      <a className="twitter" href="https://www.twitter.com/komlog_"></a>
+                    </li>
+                    <li>
+                      <small>
+                        Made with{' '}
+                        <span className="glyphicon glyphicon-heart text-danger"></span>
+                        {' '}by <strong>Komlog</strong>
+                      </small>
+                    </li>
+                  </ul>
+                </div>
             </div>
-          </div>
+          </footer>
         );
     }
 }
@@ -62,9 +63,9 @@ class Footer extends React.Component {
 class Root extends React.Component {
     render () {
         return (
-          <div className="container main-content">
+          <div className="container">
             <div className="row">
-              <div className="col-lg-12">
+              <div className="col-xs-12">
                 <h4>
                   <p>
                     Komlog is a flexible and powerful event based processing platform, aimed at <strong>processing and visualizing time series</strong>.<br />
@@ -76,7 +77,6 @@ class Root extends React.Component {
                 <p />
               </div>
             </div>
-            <div className="row">
               <h1 className="page-header"> </h1>
               <div className="col-md-4 col-sm-6">
                 <div className="panel panel-default">
@@ -84,7 +84,7 @@ class Root extends React.Component {
                     <h4><i className="glyphicon glyphicon-stats"></i> Visualize Data in Minutes</h4>
                   </div>
                   <div className="panel-body">
-                    <h5>Identify variables directly on plain texts. Monitor and visualize data from any CLI or script output.</h5>
+                    <h5>Visualize data from any CLI or script output, directly from plain texts.</h5>
                   </div>
                 </div>
               </div>
@@ -131,14 +131,13 @@ class Root extends React.Component {
               <div className="col-md-4 col-sm-6">
                 <div className="panel panel-default">
                   <div className="panel-heading">
-                    <h4><i className="glyphicon glyphicon-comment"></i> Join the Community </h4>
+                    <h4><i className="glyphicon glyphicon-comment"></i> Join the Conversation</h4>
                   </div>
                   <div className="panel-body">
-                    <h5>Join the Komlog community through our different channels, get help and exchange your knowledge.</h5>
+                    <h5>Get in touch with us, get help and give us your feedback.</h5>
                   </div>
                 </div>
               </div>
-            </div>
           </div>
         );
     }

@@ -269,10 +269,10 @@ class AgentSubMenu extends React.Component {
                 return (
                   <div key={item.aid}>
                     <div className='row key-list-item'>
-                      <div className='col-xs-1'>
+                      <div className='col-xs-3 col-sm-1'>
                         {keyState}
-                      </div> 
-                      <div id={item.aid} onClick={this.toggleShowKeyMenu} className='col-xs-8 clickable'>
+                      </div>
+                      <div id={item.aid} onClick={this.toggleShowKeyMenu} className='col-xs-8 col-sm-8 clickable'>
                         <strong>{item.agentname}</strong>
                       </div> 
                       <div className='pull-right'>
@@ -287,7 +287,7 @@ class AgentSubMenu extends React.Component {
                       </div>
                     </div>
                     <div className='row'>
-                      <div className='col-xs-7 col-xs-offset-1' style={{marginTop:'5px'}}>
+                      <div className='col-xs-12 col-sm-7 col-sm-offset-1' style={{marginTop:'5px'}}>
                         <ReactBootstrap.Collapse in={this.state.showKeyMenuOpen[item.aid]}>
                           <div className="form-group">
                             <textarea className="form-control" type="textarea" id="key" style={{height:'350px'}} onChange={this.handleChange} value={item.pubkey} readOnly={true} />
@@ -346,7 +346,6 @@ class AgentSubMenu extends React.Component {
     }
 
     render () {
-        console.log('render 300');
         var panelHeading = (
           <div className="panel-title">
             <div className="row">
@@ -367,7 +366,7 @@ class AgentSubMenu extends React.Component {
                 <div>
                   <ReactBootstrap.Well>
                     <div className='row'>
-                      <div className='col-xs-3'>
+                      <div className='col-xs-12 col-sm-3'>
                         <div className="form-group">
                           <label>Title</label>
                           <input className="form-control" type="text" id="title" onChange={this.handleNewKeyMenuChange} placeholder={this.state.titleContent} value={this.state.newKeyMenuTitleValue} />
@@ -375,7 +374,7 @@ class AgentSubMenu extends React.Component {
                       </div>
                     </div>
                     <div className='row'>
-                      <div className='col-xs-7'>
+                      <div className='col-xs-12 col-sm-7'>
                         <div className="form-group">
                           <label>Key</label>
                           <textarea className="form-control" type="textarea" id="key" style={{height:'350px'}} onChange={this.handleNewKeyMenuChange} placeholder={this.state.textareaContent} value={this.state.newKeyMenuKeyValue} />
@@ -498,14 +497,13 @@ class AccountSubMenu extends React.Component {
     }
 
     render () {
-        console.log('render 400');
         var passwordChange = <h3>Change password</h3>;
         var deleteAccount = <h3>Delete account</h3>;
         return (
           <div>
             <ReactBootstrap.Panel header={passwordChange}>
               <div className='row'>
-                <div className='col-xs-3'>
+                <div className='col-xs-12 col-sm-3'>
                   <div className={this.state.oldInputClass}>
                     <label className="control-label">Old password</label>
                     <input className="form-control" type="password" id="old" onChange={this.handleChange} value={this.state.oldTextValue} />
@@ -514,7 +512,7 @@ class AccountSubMenu extends React.Component {
                 </div>
               </div>
               <div className='row'>
-                <div className='col-xs-3'>
+                <div className='col-xs-12 col-sm-3'>
                   <div className={this.state.newInputClass}>
                     <label className="control-label">New password</label>
                     <input className="form-control" type="password" id="new" onChange={this.handleChange} value={this.state.newTextValue} />
@@ -523,7 +521,7 @@ class AccountSubMenu extends React.Component {
                 </div>
               </div>
               <div className='row'>
-                <div className='col-xs-3'>
+                <div className='col-xs-12 col-sm-3'>
                   <div className={this.state.new2InputClass}>
                     <label className="control-label">Confirm new password</label>
                     <input className="form-control" type="password" id="new2" onChange={this.handleChange} value={this.state.new2TextValue} />
@@ -789,7 +787,7 @@ class BillingSubMenu extends React.Component {
             }
             var image_uri = require("./img/plans/"+item.id.toString()+".png");
             return (
-              <div key={item.id} id={item.id} className='col-xs-4 clickable' style={{textAlign:"center"}} onClick={this.selectNewPlan}>
+              <div key={item.id} id={item.id} className='col-xs-12 col-sm-4 clickable' style={{textAlign:"center"}} onClick={this.selectNewPlan}>
                 <ReactBootstrap.Thumbnail src={image_uri} alt={item.description} className={planClass}>
                   <h3>{item.description}</h3>
                   <h4>{item.price} $/month</h4>
@@ -881,7 +879,6 @@ class BillingSubMenu extends React.Component {
     }
 
     render () {
-        console.log('render 800');
         var planInfo = this.getCurrentPlanInfo();
         var upgradePlans = this.getUpgradePlans();
         var billingTitle = <h3>Billing overview</h3>;
@@ -1151,11 +1148,10 @@ class SharedUriSubMenu extends React.Component {
     }
 
     render () {
-        console.log('render 1200');
         var panelHeading = (
           <div className="panel-title">
             <div className="row">
-              <div className="col-xs-3">
+              <div className="col-xs-6 col-sm-3">
                 <div style={{display:"inline-block", float:"none", vertialAlign:"middle"}}>Shared Uris</div>
               </div>
               <div className="pull-right">
@@ -1172,7 +1168,7 @@ class SharedUriSubMenu extends React.Component {
                 <div>
                   <ReactBootstrap.Well>
                     <div className='row'>
-                      <div className='col-xs-5 col-xs-offset-3'>
+                      <div className='col-xs-12 col-sm-5 col-sm-offset-3'>
                         <div className="alert alert-info" role="alert">
                           <strong>Important: </strong>
                           <span>uris are shared</span>
@@ -1183,13 +1179,13 @@ class SharedUriSubMenu extends React.Component {
                       </div>
                     </div>
                     <div className='row'>
-                      <div className='col-xs-6'>
+                      <div className='col-xs-12 col-sm-6'>
                         <div className="input-group">
                           <span className="input-group-addon">Share{' '}</span>
                           <input className="form-control" type="text" id="uri" onChange={this.handleShareUriMenuChange} placeholder={this.state.shareUriMenuUriPlaceholder} value={this.state.shareUriMenuUriValue} />
                         </div>
                       </div>
-                      <div className='col-xs-4'>
+                      <div className='col-xs-12 col-sm-4'>
                         <div className="input-group">
                           <span className="input-group-addon">With{' '}</span>
                           <input className="form-control" type="text" id="users" onChange={this.handleShareUriMenuChange} placeholder={this.state.shareUriMenuUsersPlaceholder} value={this.state.shareUriMenuUsersValue} />

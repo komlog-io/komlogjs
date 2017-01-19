@@ -574,7 +574,7 @@ class SnapshotDp extends React.Component {
               {summary}
             </div>
             <div className="row visual-bar">
-              <div className="col-md-5 text-center">
+              <div className="col-sm-5 text-center">
                 <ReactBootstrap.ButtonGroup bsSize="xsmall">
                   <ReactBootstrap.Button id="0" active={this.state.activeVis == 0 ? true : false} onClick={this.selectVis}>
                     chart
@@ -584,12 +584,12 @@ class SnapshotDp extends React.Component {
                   </ReactBootstrap.Button>
                 </ReactBootstrap.ButtonGroup>
               </div>
-              <div className="col-md-7">
+              <div className="col-sm-7">
                 <TimeSlider interval={this.state.interval} newIntervalCallback={this.newIntervalCallback} />
               </div>
             </div>
             <div className="row">
-              <div className="col-md-12">
+              <div className="col-sm-12">
                 {visContent}
               </div>
             </div>
@@ -881,7 +881,7 @@ class SnapshotMp extends React.Component {
               {summary}
             </div>
             <div className="row visual-bar">
-              <div className="col-md-5 text-center">
+              <div className="col-sm-5 text-center">
                 <ReactBootstrap.ButtonGroup bsSize="xsmall">
                   <ReactBootstrap.Button id="0" active={this.state.activeVis == 0 ? true : false} onClick={this.selectVis}>
                     chart
@@ -891,12 +891,12 @@ class SnapshotMp extends React.Component {
                   </ReactBootstrap.Button>
                 </ReactBootstrap.ButtonGroup>
               </div>
-              <div className="col-md-7">
+              <div className="col-sm-7">
                 <TimeSlider interval={this.state.interval} newIntervalCallback={this.newIntervalCallback} />
               </div>
             </div>
             <div className="row">
-              <div className="col-md-12">
+              <div className="col-sm-12">
                 {visContent}
               </div>
             </div>

@@ -328,7 +328,7 @@ class DashboardGrid extends React.Component {
     componentDidMount () {
         var width=ReactDOM.findDOMNode(this).offsetWidth;
         var height=ReactDOM.findDOMNode(this).offsetHeight;
-        var minCellWidth = 450;
+        var minCellWidth = 445;
         var columns = parseInt(width / minCellWidth);
         var cellWidth= parseInt(width / columns);
         var colDim={};

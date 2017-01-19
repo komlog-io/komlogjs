@@ -5,7 +5,15 @@ import {Snapshot} from './snapshot.jsx';
 import {topics} from './types.js';
 
 window.loadSlide = (data) => {
-    PubSub.publish(topics.LOAD_SLIDE,data);
+    if (window.screen.availWidth > 767) {
+        PubSub.publish(topics.LOAD_SLIDE,data);
+    } else {
+        var payload = {
+            message:{type:'info', message:'To open graphs, access from a tablet or computer'},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
+    }
 }
 
 
