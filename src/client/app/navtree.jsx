@@ -25,7 +25,7 @@ class TreeItem extends React.Component {
             typeGlyph:'unchecked',
             deleteNode: false,
             label:label,
-            style:{paddingLeft:paddingLeft.toString()+'px'}
+            style:{paddingLeft:paddingLeft.toString()+'px'},
         };
 
     }
@@ -132,7 +132,7 @@ class TreeItem extends React.Component {
                   {action}
                   <div style={this.state.style} onClick={this.toggleCollapse}>
                     {collapseIcon}
-                    <span style={{paddingLeft:'5px'}}>{this.state.label}</span>
+                    <span style={{paddingLeft:'5px'}} title={this.state.label}>{this.state.label}</span>
                   </div>
                 </div>
                 <ReactCSSTransitionGroup transitionName='tree-item' transitionEnterTimeout={500} transitionLeaveTimeout={300}>

@@ -307,28 +307,45 @@ class SideMenu extends React.Component {
         }
     }
 
+    getContent () {
+        var menu;
+        if (this.state.activeTab == 1) {
+            menu = <DashboardList />;
+        } else if (this.state.activeTab == 2) {
+            menu = <TreeItem uri='' level={1} />;
+        } else {
+            menu = <SharedWithMeList />;
+        }
+        return (
+          <div className="side-menu-content">
+            {menu}
+          </div>
+        );
+    }
+
     render () {
         var brand="_< Komlog";
+        var content = this.getContent();
         return (
           <div>
             <div className="brand">{brand}</div>
             <MenuToolBar />
-            <ReactBootstrap.Tabs activeKey={this.state.activeTab} onSelect={this.switchTab} id="menu">
-              <ReactBootstrap.Tab eventKey={1} title="Dashboards">
-                <DashboardList />
-              </ReactBootstrap.Tab>
-              <ReactBootstrap.Tab eventKey={2} title="Data model">
-                <TreeItem uri='' level={1} />
-              </ReactBootstrap.Tab>
-              <ReactBootstrap.Tab eventKey={3} title="Shared with me">
-                <SharedWithMeList />
-              </ReactBootstrap.Tab>
-            </ReactBootstrap.Tabs>
-            <div className="side-footer">
+            <div className="side-menu-tabs">
+              <ReactBootstrap.Tabs activeKey={this.state.activeTab} onSelect={this.switchTab} id="menu">
+                <ReactBootstrap.Tab eventKey={1} title="Dashboards">
+                </ReactBootstrap.Tab>
+                <ReactBootstrap.Tab eventKey={2} title="Data model">
+                </ReactBootstrap.Tab>
+                <ReactBootstrap.Tab eventKey={3} title="Shared with me">
+                </ReactBootstrap.Tab>
+              </ReactBootstrap.Tabs>
+            </div>
+            {content}
+            <div className="side-menu-footer">
                Made with{" "}
               <span className='glyphicon glyphicon-heart' />
               {" "}by{" "}
-              <span className='side-footer-brand'>Komlog</span>
+              <span className='side-menu-footer-brand'>Komlog</span>
             </div>
           </div>
         );
