@@ -61,7 +61,6 @@ class Dashboard extends React.Component {
     }
 
     componentDidMount () {
-        console.log('dashboard componentDidMount');
         this.initialization();
     }
 
@@ -180,7 +179,6 @@ class Dashboard extends React.Component {
     }
 
     render () {
-        console.log('dashboard render');
         if (this.state.loading) {
             return (
                 <div style={styles.banner}>
@@ -328,7 +326,6 @@ class DashboardGrid extends React.Component {
     };
 
     componentDidMount () {
-        console.log('dashboardGrid componentDidMount');
         var width=ReactDOM.findDOMNode(this).offsetWidth;
         var height=ReactDOM.findDOMNode(this).offsetHeight;
         var minCellWidth = 445;
@@ -342,7 +339,6 @@ class DashboardGrid extends React.Component {
     }
 
     componentDidUpdate () {
-        console.log('dashboardGrid componentDidUpdate');
         var shouldUpdate = false;
         var cells = this.state.cells;
         var colDim = this.state.colDim;
@@ -484,7 +480,6 @@ class DashboardGrid extends React.Component {
     }
 
     render () {
-        console.log('dashboardGrid render');
         if (this.state.loading) {
             return (
               <div style={styles.banner}>

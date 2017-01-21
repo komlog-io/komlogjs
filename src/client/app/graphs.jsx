@@ -44,6 +44,9 @@ let d3TimeSlider = {
         var margin = {top: 5, right: 0, bottom: 20, left: 0};
         var width=d3.select(el).node().getBoundingClientRect().width,
             height=10;
+        if (width == 0) {
+            return;
+        }
         var dateFormat = d3.timeFormat("%b %d %H:%M");
         function brushstart () {
             svg.classed("selecting", true);
@@ -359,6 +362,9 @@ let d3Linegraph = {
         var margin = {top: 0, right: 0, bottom: 40, left: 0},
             height = 220 - margin.top - margin.bottom,
             width=d3.select(el).node().getBoundingClientRect().width-margin.left;
+        if (width == 0) {
+            return;
+        }
 
 
         function update_axis_domains () {
@@ -783,7 +789,6 @@ let d3Linegraph = {
 
 let d3Histogram = {
     create: function (el, data) {
-        console.log('histogram create',data);
         var margin = {top: 0, right: 0, bottom: 40, left: 0},
             height = 220 - margin.top - margin.bottom,
             width=d3.select(el).node().getBoundingClientRect().width;
@@ -829,7 +834,6 @@ let d3Histogram = {
     },
 
     update: function (el, data) {
-        console.log('histogram update',data);
         var formatCount = d3.format(",.0f");
         var formatDecimal = d3.format(",.2f");
         var formatPercent = d3.format(".1%");
@@ -837,6 +841,9 @@ let d3Histogram = {
         var margin = {top: 0, right: 0, bottom: 40, left: 0},
             height = 220 - margin.top - margin.bottom,
             width = d3.select(el).node().getBoundingClientRect().width;
+        if (width == 0) {
+            return;
+        }
         var x_values=[];
         function make_x_axis() {
             return d3.axisBottom(x)
@@ -1519,6 +1526,9 @@ let d3SummaryDatasource = {
             height = 200;
         }
         var width=d3.select(el).node().getBoundingClientRect().width-margin.left;
+        if (width == 0) {
+            return;
+        }
         var dateFormat = d3.timeFormat("%Y/%m/%d - %H:%M:%S");
         var date=new Date(ts*1000);
         var dateText=dateFormat(date);
