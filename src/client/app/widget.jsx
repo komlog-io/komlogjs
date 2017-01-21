@@ -47,6 +47,16 @@ class Widget extends React.Component {
         });
     }
 
+    shouldComponentUpdate (nextProps, nextState) {
+        if (this.state.conf != nextState.conf) {
+            return true;
+        }
+        if (this.props.isPinned != nextProps.isPinned) {
+            return true;
+        }
+        return false;
+    }
+
     subscriptionHandler = (msg,data) => {
         switch (msg) {
             case topics.WIDGET_CONFIG_UPDATE(this.props.wid):
@@ -959,7 +969,6 @@ class WidgetDs extends React.Component {
                 });
 
                 newState.loading = false;
-                console.log('estado inicial',newState);
                 this.setState(newState);
             });
         });
@@ -1350,7 +1359,6 @@ class WidgetDp extends React.Component {
                 data: values[1].data,
                 loading:false
             }
-            console.log('estado inicial',newState);
             this.setState(newState);
         });
     }
@@ -1681,7 +1689,6 @@ class WidgetMp extends React.Component {
 
             newState.loading = false;
 
-            console.log('estado inicial',newState);
             this.setState(newState);
         });
     }
@@ -1826,7 +1833,6 @@ class WidgetMp extends React.Component {
     }
 
     async refreshConfig () {
-        console.log('inicio refreshconfig');
         var shouldUpdate = false;
         var data = this.state.data;
         var newConfig = {};

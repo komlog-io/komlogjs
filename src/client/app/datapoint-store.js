@@ -110,7 +110,6 @@ class DatapointStore {
     getData (pid, interval, tid) {
         var responseData;
         var requestInterval = (subinterval) => {
-            console.log('requestInterval',subinterval);
             var parameters = {};
             if (subinterval) {
                 parameters.its=subinterval.its;
@@ -125,7 +124,6 @@ class DatapointStore {
                 data: parameters,
             })
             .done(response => {
-                console.log('requestInterval response',subinterval);
                 if (response.length > 0) {
                     var receivedTs=response.map(e => e.ts);
                     var receivedInterval={
@@ -139,10 +137,8 @@ class DatapointStore {
                         }
                         requestInterval(newInterval);
                     }
-                    console.log('requestInterval almacenamos datos',subinterval);
                     var result = this.storeData(pid, tid, response);
                     if (result.modified) {
-                        console.log('requestInterval notificamos',subinterval);
                         var topic = topics.DATAPOINT_DATA_UPDATE(pid);
                         PubSub.publish(topic, {interval:receivedInterval});
                     }
@@ -150,35 +146,28 @@ class DatapointStore {
             })
             .fail( data => {console.log('no data for interval',subinterval,data);});
         }
-        console.log('vamos a obtener datos',pid,interval,tid);
         var intervals = [interval];
         if (intervals.length > 0) {
             return new Promise ( (resolve, reject) => {
                 var requests = intervals.map( i => requestInterval(i));
                 Promise.all(requests).then( values => {
-                    console.log('Requests resueltas',values);
-                    console.log('Requests resueltas llamo a getIntervalData');
                     responseData = this._getIntervalData(pid,interval);
                     resolve ({pid:pid,data:responseData});
                 })
                 .catch( values => {
-                    console.log('(catch) Requests resueltas llamo a getIntervalData');
                     responseData = this._getIntervalData(pid,interval);
                     resolve ({pid:pid,data:responseData});
                 });
             });
         } else {
-            console.log('(length 0) llamo a getIntervalData');
             responseData = this._getIntervalData(pid,interval);
             return Promise.resolve({pid:pid,data:responseData});
         }
     }
 
     _getIntervalData (pid, interval) {
-        console.log('_getIntervalData',pid,interval);
         var data = [];
         if (this._datapointData.hasOwnProperty(pid)) {
-            console.log('_getIntervalData',this._datapointData[pid]);
             Object.keys(this._datapointData[pid]).forEach( key => {
                 if (!interval || (interval.its <= key && key <= interval.ets)) {
                     data.push({ts:key,value:this._datapointData[pid][key]});

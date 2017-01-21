@@ -46,6 +46,13 @@ class Snapshot extends React.Component {
         });
     }
 
+    shouldComponentUpdate (nextProps, nextState) {
+        if (this.state.conf != nextState.conf) {
+            return true;
+        }
+        return false;
+    }
+
     subscriptionHandler = (msg,data) => {
         switch (msg) {
             case topics.SNAPSHOT_CONFIG_UPDATE(this.props.nid):
@@ -634,7 +641,6 @@ class SnapshotMp extends React.Component {
 
             newState.loading = false;
 
-            console.log('estado inicial',newState);
             this.setState(newState);
         });
     }

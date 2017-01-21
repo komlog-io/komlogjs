@@ -156,6 +156,7 @@ let d3TimeSlider = {
                 .style('opacity',0.8);
         }
         function brushmove () {
+            if (!d3.event.selection) return;
             var positions=d3.event.selection;
             var leftX=x(positions[0]);
             var rightX=x(positions[1]);
