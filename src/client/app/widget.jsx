@@ -50,8 +50,13 @@ class Widget extends React.Component {
     shouldComponentUpdate (nextProps, nextState) {
         if (this.state.conf != nextState.conf) {
             return true;
-        }
-        if (this.props.isPinned != nextProps.isPinned) {
+        } else if (this.state.showConfig != nextState.showConfig) {
+            return true;
+        } else if (this.state.downloadCounter != nextState.downloadCounter) {
+            return true;
+        } else if (this.state.shareCounter != nextState.shareCounter) {
+            return true;
+        } else if (this.props.isPinned != nextProps.isPinned) {
             return true;
         }
         return false;
@@ -278,9 +283,13 @@ class WidgetConfigDs extends React.Component {
         did: null,
         datasourcename: '',
         deleteModal: false,
+        feedbackModal: false,
+        feedbackPos: [],
+        feedbackNeg: [],
     };
 
     subscriptionTokens = [];
+    popovers = {};
 
     async initialization () {
         var config = await getWidgetConfig(this.props.wid);
@@ -345,9 +354,252 @@ class WidgetConfigDs extends React.Component {
     }
 
     confirmDelete = () => {
-        PubSub.publish(topics.DELETE_DATASOURCE,{did:this.props.did});
+        PubSub.publish(topics.DELETE_DATASOURCE,{did:this.state.did});
         this.setState({deleteModal: false});
         this.props.closeCallback();
+    }
+
+    getFeedbackModalContent () {
+        var elements = this.generateHtmlContent();
+        var element_nodes=elements.map( element => {
+            if (element.type == 'text') {
+                return <span key={element.ne}>{element.data}</span>;
+            } else if (element.type == 'nl') {
+                return <br key={element.ne} />;
+            } else if (element.type == 'datapoint') {
+                var title=<div>This value belongs to <strong>{element.datapointname}</strong>?</div>
+                var popover=(
+                  <ReactBootstrap.Popover style={{zIndex:1260, wordWrap:"break-word"}} id='dpvalidation' title={title}>
+                    <div className="row">
+                      <div className="col-xs-4 col-xs-offset-2">
+                        <ReactBootstrap.Button bsSize="xsmall" bsStyle="success" onClick={this.onClickDatapointYes.bind(null, element.pid, element.p, element.l)}>Yes</ReactBootstrap.Button>
+                      </div>
+                      <div className="col-xs-4 col-xs-offset-1">
+                        <ReactBootstrap.Button bsSize="xsmall" bsStyle="danger" onClick={this.onClickDatapointNo.bind(null, element.pid, element.p, element.l)}>No</ReactBootstrap.Button>
+                      </div>
+                    </div>
+                  </ReactBootstrap.Popover>
+                );
+                return (
+                  <ReactBootstrap.OverlayTrigger key={element.ne} ref={ popover => this.popovers[element.p] = popover} placement="right" trigger="click" overlay={popover} rootClose>
+                    <span className="datapoint" style={{borderBottom:'2px solid '+element.c}}>{element.data}</span>
+                  </ReactBootstrap.OverlayTrigger>
+                );
+            } else if (element.type == 'variable') {
+                var title=<div>This value belongs to <strong>any existing datapoint</strong>?</div>
+                var list = this.state.dpsInfo.map( (dp,i) => {
+                    return (
+                      <ReactBootstrap.ListGroupItem key={i} onClick={this.onClickVariable.bind(null, dp.pid, element.p, element.l)}>
+                        {dp.datapointname.split(this.state.datasourcename)[1]}
+                      </ReactBootstrap.ListGroupItem>
+                    );
+                });
+                var popover=(
+                  <ReactBootstrap.Popover className="variable-feedback-popover" style={{zIndex:1260, wordWrap:"break-word"}} id='dpidentification' title={title}>
+                    <ReactBootstrap.ListGroup fill>
+                      {list}
+                    </ReactBootstrap.ListGroup>
+                  </ReactBootstrap.Popover>
+                );
+                return (
+                  <ReactBootstrap.OverlayTrigger key={element.ne} ref={ popover => this.popovers[element.p] = popover} placement="right" trigger="click" overlay={popover} rootClose>
+                    <span className="variable" style={{borderBottom: '2px solid #eee'}}>{element.data}</span>
+                  </ReactBootstrap.OverlayTrigger>
+                );
+            }
+        });
+        return (
+          <div className="modal-ds-content">
+            {element_nodes}
+          </div>
+        );
+    }
+
+    generateHtmlContent () {
+        var dsData = this.state.dsData;
+        var dsVars = dsData.variables;
+        var dsDatapoints = this.state.dsDatapoints;
+        var dpsInfo = this.state.dpsInfo;
+        var elements=[];
+        if (!dsData) {
+            return elements;
+        }
+        var numElement = 0;
+        var cursorPosition=0;
+        var newLineRegex=/(?:\r\n|\r|\n)/g;
+        var dsSubContent, start, text, match, datapointname, position, length;
+        dsVars.forEach( v => {
+            position=v[0];
+            length=v[1];
+            dsSubContent=dsData.content.substr(cursorPosition,position-cursorPosition);
+            start=0;
+            match = newLineRegex.exec(dsSubContent);
+            while(match != null) {
+                text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
+                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push({ne:numElement++,type:'nl'});
+                start=match.index+match.length-1;
+                match = newLineRegex.exec(dsSubContent);
+            }
+            if (start<position) {
+                text=dsSubContent.substr(start,position-start).replace(/ /g, '\u00a0');
+                elements.push({ne:numElement++,type:'text',data:text});
+            }
+            var datapointFound=dsDatapoints.some( dp => {
+                if (dp.index == position) {
+                    text=dsData.content.substr(position,length);
+                    var datapointname='...';
+                    dpsInfo.forEach( state_dp => {
+                        if (state_dp.pid == dp.pid) {
+                            datapointname = state_dp.datapointname.split(this.state.datasourcename)[1];
+                        }
+                    });
+                    elements.push({ne:numElement++,type:'datapoint',pid:dp.pid,p:position,l:length,data:text,datapointname:datapointname,c:dp.c});
+                    return true;
+                }
+            });
+            if (datapointFound == false) {
+                text=dsData.content.substr(position,length);
+                elements.push({ne:numElement++, type:'variable',data:text,p:position,l:length});
+            } else {
+                datapointFound = false;
+            }
+            cursorPosition=position+length;
+        });
+        if (cursorPosition<dsData.content.length) {
+            dsSubContent=dsData.content.substr(cursorPosition,dsData.content.length-cursorPosition);
+            start=0;
+            while((match=newLineRegex.exec(dsSubContent)) != null) {
+                text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
+                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push({ne:numElement++,type:'nl'});
+                start=match.index+match.length-1;
+            }
+            if (start<dsSubContent.length-1) {
+                text=dsSubContent.substr(start,dsSubContent.length-1-start).replace(/ /g, '\u00a0');
+                elements.push({ne:numElement++,type:'text',data:text});
+            }
+        }
+        return elements;
+    }
+
+    showFeedbackModal = () => {
+        var newState = {};
+        var dsData = getDatasourceData(this.state.did);
+        var dsConfig = getDatasourceConfig(this.state.did);
+        this.setState({feedbackModal:true, loadingFeedbackModal:true});
+        Promise.all([dsConfig, dsData]).then( values  => {
+            var dpPromises = values[0].pids.map (pid => getDatapointConfig(pid));
+
+            newState.datasourcename = values[0].datasourcename
+            newState.dsData = values[1];
+            newState.dsDatapoints = values[1].datapoints.map( dp => {
+                return {pid:dp.pid,index:dp.index,c:'#eee'}
+            });
+            newState.seq = values[1].seq;
+            newState.dpsInfo= [];
+
+            Promise.all(dpPromises).then( dpConfigs => {
+
+                dpConfigs.forEach ( dp => {
+                    newState.dpsInfo.push({
+                        pid:dp.pid,
+                        datapointname:dp.datapointname,
+                    });
+                });
+
+                newState.dpsInfo.sort( (a,b) => {
+                    var nameA=a.datapointname.toLowerCase();
+                    var nameB=b.datapointname.toLowerCase();
+                    return ((nameA < nameB) ? -1 : ((nameA > nameB) ? 1 : 0));
+                });
+
+                newState.loadingFeedbackModal = false;
+                this.setState(newState);
+            });
+        });
+    }
+
+    closeFeedbackModal = () => {
+        this.popovers={};
+        this.setState({feedbackModal:false, feedbackPos:[],feedbackNeg:[]});
+    }
+
+    sendFeedback = () => {
+        var requests = this.state.feedbackPos.map( reg => {
+            return {type:'p', pid:reg.pid, p:reg.pos, l:reg.len};
+        });
+        this.state.feedbackNeg.forEach ( reg => {
+            var exists = requests.some( req => req.pid == reg.pid);
+            if (!exists) {
+                requests.push({type:'n', pid:reg.pid, p:reg.pos, l:reg.len});
+            }
+        });
+        requests.forEach( req => {
+            if (req.type == 'p') {
+                var topic = topics.MARK_POSITIVE_VAR;
+                var payload = {pid:req.pid, p:req.p, l:req.l, seq:this.state.seq};
+                PubSub.publish(topic, payload);
+            } else if (req.type == 'n') {
+                var topic = topics.MARK_NEGATIVE_VAR;
+                var payload = {pid:req.pid, p:req.p, l:req.l, seq:this.state.seq};
+                PubSub.publish(topic, payload);
+            }
+        });
+        this.closeFeedbackModal();
+        var payload = {
+            message:{type:'success',message:'Thanks for your feedback'},
+            messageTime:(new Date).getTime()
+        };
+        PubSub.publish(topics.BAR_MESSAGE(),payload);
+    }
+
+    onClickDatapointYes = (pid, pos, len) => {
+        if (this.popovers.hasOwnProperty(pos)) {
+            this.popovers[pos].hide();
+        }
+        var dsDatapoints = this.state.dsDatapoints;
+        for (var i=0,j=dsDatapoints.length; i<j;i++) {
+            if (dsDatapoints[i].pid == pid) {
+                if (dsDatapoints[i].index == pos) {
+                    dsDatapoints[i].c = 'green';
+                } else {
+                    dsDatapoints[i].c = 'red';
+                }
+            }
+        }
+        var positives = this.state.feedbackPos.filter(dp => dp.pid!=pid);
+        positives.push({pid:pid, pos:pos, len:len});
+        var negatives = this.state.feedbackNeg.filter(dp => !(dp.pid == pid && dp.pos == pos));
+        this.setState({dsDatapoints:dsDatapoints, feedbackPos:positives, feedbackNeg:negatives});
+    }
+
+    onClickDatapointNo = (pid, pos, len) => {
+        if (this.popovers.hasOwnProperty(pos)) {
+            this.popovers[pos].hide();
+        }
+        var dsDatapoints = this.state.dsDatapoints.filter( dp => !(dp.pid == pid && dp.index == pos));
+        var positives = this.state.feedbackPos.filter(dp => !(dp.pid==pid && dp.pos==pos));
+        var negatives = this.state.feedbackNeg.filter(dp => !(dp.pid == pid && dp.pos == pos));
+        negatives.push({pid:pid, pos:pos, len:len});
+        this.setState({dsDatapoints:dsDatapoints, feedbackPos:positives, feedbackNeg:negatives});
+    }
+
+    onClickVariable = (pid, pos, len) => {
+        if (this.popovers.hasOwnProperty(pos)) {
+            this.popovers[pos].hide();
+        }
+        var dsDatapoints = this.state.dsDatapoints;
+        for (var i=0, j=dsDatapoints.length; i<j; i++) {
+            if (dsDatapoints[i].pid == pid && dsDatapoints[i].index != pos) {
+                dsDatapoints[i].c = 'red';
+            }
+        }
+        dsDatapoints.push({pid:pid, index:pos, c:'green'});
+        var positives = this.state.feedbackPos.filter(dp => dp.pid!=pid);
+        positives.push({pid:pid, pos:pos, len:len});
+        var negatives = this.state.feedbackNeg.filter(dp => !(dp.pid == pid && dp.pos == pos));
+        this.setState({dsDatapoints:dsDatapoints, feedbackPos:positives, feedbackNeg:negatives});
     }
 
     render () {
@@ -362,6 +614,36 @@ class WidgetConfigDs extends React.Component {
         } else if (this.state.datasourcename.split(':').length > 1) {
             return null;
         }
+        var feedbackModalContent;
+        if (this.state.feedbackModal == true) {
+            if (this.state.loadingFeedbackModal == true) {
+                feedbackModalContent = null;
+            } else {
+                feedbackModalContent = this.getFeedbackModalContent();
+            }
+        } else {
+            feedbackModalContent = null;
+        }
+        var feedback_modal =(
+          <ReactBootstrap.Modal show={this.state.feedbackModal} onHide={this.closeFeedbackModal}>
+            <ReactBootstrap.Modal.Header closeButton={true}>
+              <ReactBootstrap.Modal.Title>
+                Help us improve datapoint identification with your feedback.
+              </ReactBootstrap.Modal.Title>
+            </ReactBootstrap.Modal.Header>
+            <ReactBootstrap.Modal.Body>
+              {feedbackModalContent}
+            </ReactBootstrap.Modal.Body>
+            <ReactBootstrap.Modal.Footer>
+              <ReactBootstrap.Button bsStyle="default" onClick={this.closeFeedbackModal}>
+                Cancel
+              </ReactBootstrap.Button>
+              <ReactBootstrap.Button bsStyle="success" onClick={this.sendFeedback} disabled={this.state.feedbackPos.length + this.state.feedbackNeg.length == 0}>
+                Ok
+              </ReactBootstrap.Button>
+            </ReactBootstrap.Modal.Footer>
+          </ReactBootstrap.Modal>
+        );
         var delete_modal=(
           <ReactBootstrap.Modal show={this.state.deleteModal} onHide={this.cancelDelete}>
             <ReactBootstrap.Modal.Header closeButton={true}>
@@ -379,7 +661,7 @@ class WidgetConfigDs extends React.Component {
               <ReactBootstrap.Button bsStyle="default" onClick={this.cancelDelete}>
                 Cancel
               </ReactBootstrap.Button>
-              <ReactBootstrap.Button bsStyle="primary" onClick={this.confirmDelete}>
+              <ReactBootstrap.Button bsStyle="danger" onClick={this.confirmDelete}>
                 Delete
               </ReactBootstrap.Button>
             </ReactBootstrap.Modal.Footer>
@@ -389,18 +671,37 @@ class WidgetConfigDs extends React.Component {
           <ReactBootstrap.Collapse in={this.props.showConfig}>
             <div>
               <ReactBootstrap.Well>
-                <ReactBootstrap.ListGroup>
-                  <ReactBootstrap.ListGroupItem bsSize="xsmall">
-                    <strong>Delete Datasource</strong>
-                    <div className="text-right">
-                      <ReactBootstrap.Button bsSize="small" bsStyle="danger" onClick={this.deleteWidget}>
-                        Delete
-                      </ReactBootstrap.Button>
-                    </div>
-                  </ReactBootstrap.ListGroupItem>
-                </ReactBootstrap.ListGroup>
+                <ReactBootstrap.Panel>
+                  <ReactBootstrap.Table condensed responsive>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <strong>Any datapoint misidentified?</strong>
+                        </td>
+                        <td colSpan="2" className="text-right">
+                          <ReactBootstrap.Button bsSize="small" bsStyle="primary" onClick={this.showFeedbackModal}>
+                            <strong>Send feedback</strong>
+                          </ReactBootstrap.Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </ReactBootstrap.Table>
+                  <ReactBootstrap.Table condensed responsive>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <strong>Delete Datasource</strong>
+                        </td>
+                        <td colSpan="2" className="text-right">
+                          <ReactBootstrap.Button bsSize="small" bsStyle="danger" onClick={this.deleteWidget}><strong>Delete</strong></ReactBootstrap.Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </ReactBootstrap.Table>
+                </ReactBootstrap.Panel>
               </ReactBootstrap.Well>
               {delete_modal}
+              {feedback_modal}
             </div>
           </ReactBootstrap.Collapse>
         );
@@ -543,7 +844,7 @@ class WidgetConfigDp extends React.Component {
               <ReactBootstrap.Button bsStyle="default" onClick={this.cancelDelete}>
                 Cancel
               </ReactBootstrap.Button>
-              <ReactBootstrap.Button bsStyle="primary" onClick={this.confirmDelete}>
+              <ReactBootstrap.Button bsStyle="danger" onClick={this.confirmDelete}>
                 Delete
               </ReactBootstrap.Button>
             </ReactBootstrap.Modal.Footer>
@@ -554,44 +855,46 @@ class WidgetConfigDp extends React.Component {
           <ReactBootstrap.Collapse in={this.props.showConfig}>
             <div>
               <ReactBootstrap.Well>
-                <ReactBootstrap.ListGroup>
-                  <ReactBootstrap.ListGroupItem bsSize="small">
-                    <ReactBootstrap.Table condensed={true} responsive={true}>
-                      <tbody>
-                        <tr>
-                          <td>
-                            <strong>Color</strong>
-                          </td>
-                          <td className="text-right">
-                            <ReactBootstrap.Form inline>
-                              <ReactBootstrap.FormGroup>
-                                <ReactBootstrap.InputGroup>
-                                  <ReactBootstrap.FormControl placeholder={this.state.color} value={this.state.newColor} bsSize="xsmall" type="text" onChange={this.handleChange} />
-                                  <ReactBootstrap.InputGroup.Addon>{boxColor}</ReactBootstrap.InputGroup.Addon>
-                                </ReactBootstrap.InputGroup>
-                              </ReactBootstrap.FormGroup>
-                            </ReactBootstrap.Form>
-                          </td>
-                        </tr>
-                        <tr>
-                          <td colSpan="2" className="text-right">
-                            <ReactBootstrap.Button bsSize="small" bsStyle="primary" onClick={this.updateConfig} disabled={this.state.updateDisabled}>
-                              Update
-                            </ReactBootstrap.Button>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </ReactBootstrap.Table>
-                  </ReactBootstrap.ListGroupItem>
-                  <ReactBootstrap.ListGroupItem bsSize="xsmall">
-                    <strong>Delete Datapoint</strong>
-                    <div className="text-right">
-                      <ReactBootstrap.Button bsSize="small" bsStyle="danger" onClick={this.deleteWidget}>
-                        Delete
-                      </ReactBootstrap.Button>
-                    </div>
-                  </ReactBootstrap.ListGroupItem>
-                </ReactBootstrap.ListGroup>
+                <ReactBootstrap.Panel>
+                  <ReactBootstrap.Table condensed responsive>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <strong>Color</strong>
+                        </td>
+                        <td className="text-right">
+                          <ReactBootstrap.Form inline>
+                            <ReactBootstrap.FormGroup>
+                              <ReactBootstrap.InputGroup>
+                                <ReactBootstrap.FormControl placeholder={this.state.color} value={this.state.newColor} bsSize="xsmall" type="text" onChange={this.handleChange} />
+                                <ReactBootstrap.InputGroup.Addon>{boxColor}</ReactBootstrap.InputGroup.Addon>
+                              </ReactBootstrap.InputGroup>
+                            </ReactBootstrap.FormGroup>
+                          </ReactBootstrap.Form>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colSpan="2" className="text-right">
+                          <ReactBootstrap.Button bsSize="small" bsStyle="primary" onClick={this.updateConfig} disabled={this.state.updateDisabled}>
+                            <strong>Update</strong>
+                          </ReactBootstrap.Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </ReactBootstrap.Table>
+                  <ReactBootstrap.Table condensed responsive>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <strong>Delete Datapoint</strong>
+                        </td>
+                        <td colSpan="2" className="text-right">
+                          <ReactBootstrap.Button bsSize="small" bsStyle="danger" onClick={this.deleteWidget}><strong>Delete</strong></ReactBootstrap.Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </ReactBootstrap.Table>
+                </ReactBootstrap.Panel>
               </ReactBootstrap.Well>
               {delete_modal}
             </div>
@@ -824,7 +1127,7 @@ class WidgetConfigMp extends React.Component {
             );
         });
         return (
-          <ReactBootstrap.Table>
+          <ReactBootstrap.Table condensed responsive fill>
             <tbody>
               {list}
             </tbody>
@@ -857,7 +1160,7 @@ class WidgetConfigMp extends React.Component {
             </ReactBootstrap.Modal.Body>
             <ReactBootstrap.Modal.Footer>
               <ReactBootstrap.Button bsStyle="default" onClick={this.cancelDelete}>Cancel</ReactBootstrap.Button>
-              <ReactBootstrap.Button bsStyle="primary" onClick={this.confirmDelete}>Delete</ReactBootstrap.Button>
+              <ReactBootstrap.Button bsStyle="danger" onClick={this.confirmDelete}>Delete</ReactBootstrap.Button>
             </ReactBootstrap.Modal.Footer>
           </ReactBootstrap.Modal>
         );
@@ -866,39 +1169,43 @@ class WidgetConfigMp extends React.Component {
           <ReactBootstrap.Collapse in={this.props.showConfig}>
             <div>
               <ReactBootstrap.Well>
-                <ReactBootstrap.ListGroup>
-                  <ReactBootstrap.ListGroupItem bsSize="small">
-                    <ReactBootstrap.Table condensed={true} responsive={true}>
-                      <tbody>
-                        <tr>
-                          <td>
-                            <strong>Graph Name</strong>
-                          </td>
-                          <td className="text-right">
-                            <ReactBootstrap.FormControl placeholder={this.state.widgetname} value={this.state.newWidgetname} bsSize="small" type="text" onChange={this.handleNameChange} />
-                          </td>
-                        </tr>
-                        <tr>
-                          <td>
-                            <strong>Datapoints</strong>
-                          </td>
-                          <td>{datapointList}</td>
-                        </tr>
-                        <tr>
-                          <td colSpan="2" className="text-right">
-                            <ReactBootstrap.Button bsSize="small" bsStyle="primary" onClick={this.updateConfig}>Update</ReactBootstrap.Button>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </ReactBootstrap.Table>
-                  </ReactBootstrap.ListGroupItem>
-                  <ReactBootstrap.ListGroupItem bsSize="xsmall">
-                    <strong>Delete Graph</strong>
-                    <div className="text-right">
-                      <ReactBootstrap.Button bsSize="small" bsStyle="danger" onClick={this.deleteWidget}>Delete</ReactBootstrap.Button>
-                    </div>
-                  </ReactBootstrap.ListGroupItem>
-                </ReactBootstrap.ListGroup>
+                <ReactBootstrap.Panel>
+                  <ReactBootstrap.Table condensed responsive>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <strong>Graph Name</strong>
+                        </td>
+                        <td className="text-right">
+                          <ReactBootstrap.FormControl placeholder={this.state.widgetname} value={this.state.newWidgetname} bsSize="small" type="text" onChange={this.handleNameChange} />
+                        </td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <strong>Datapoints</strong>
+                        </td>
+                        <td>{datapointList}</td>
+                      </tr>
+                      <tr>
+                        <td colSpan="2" className="text-right">
+                          <ReactBootstrap.Button bsSize="small" bsStyle="primary" onClick={this.updateConfig}><strong>Update</strong></ReactBootstrap.Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </ReactBootstrap.Table>
+                  <ReactBootstrap.Table condensed responsive>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <strong>Delete Graph</strong>
+                        </td>
+                        <td colSpan="2" className="text-right">
+                          <ReactBootstrap.Button bsSize="small" bsStyle="danger" onClick={this.deleteWidget}><strong>Delete</strong></ReactBootstrap.Button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </ReactBootstrap.Table>
+                </ReactBootstrap.Panel>
               </ReactBootstrap.Well>
               {delete_modal}
             </div>
@@ -2286,6 +2593,29 @@ class WidgetDsVariable extends React.Component {
         );
     }
 }
+
+const CustomPopover = React.createClass({
+  render() {
+    return (
+      <div
+        style={{
+          ...this.props.style,
+          position: 'absolute',
+          backgroundColor: '#EEE',
+          boxShadow: '0 5px 10px rgba(0, 0, 0, 0.2)',
+          border: '1px solid #CCC',
+          borderRadius: 3,
+          marginLeft: -5,
+          marginTop: 5,
+          padding: 10,
+          zIndex: 1060,
+        }}
+      >
+        <strong>Holy guacamole!</strong> Check this info.
+      </div>
+    );
+  },
+});
 
 export {
     Widget,

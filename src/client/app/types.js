@@ -58,6 +58,7 @@ const topics = {
     LOAD_DATAPOINT_SLIDE:'loadDatapointSlide',
     LOAD_DATASOURCE_SLIDE:'loadDatasourceSlide',
     LOCAL_URI_UPDATE:'localUriUpdate',
+    MARK_NEGATIVE_VAR:'markNegativeVar',
     MARK_POSITIVE_VAR:'markPositiveVar',
     MODIFY_DASHBOARD:'modifyDashboard',
     MODIFY_DATAPOINT:'modifyDatapoint',

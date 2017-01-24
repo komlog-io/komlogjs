@@ -180,7 +180,7 @@ class EventTypeDatapointIdentification extends React.Component {
                         dsContent.push({
                             pos:start,
                             type:'text',
-                            content:lines[i]
+                            content:lines[i].replace(/ /g,'\u00a0')
                         });
                         if (i<lines.length-1) {
                             start += 1;
@@ -212,7 +212,7 @@ class EventTypeDatapointIdentification extends React.Component {
                     dsContent.push({
                         pos:start,
                         type:'text',
-                        content:lines[i]
+                        content:lines[i].replace(/ /g,'\u00a0')
                     });
                     if (i<lines.length-1) {
                         start += 1;

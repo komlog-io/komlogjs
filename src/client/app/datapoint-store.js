@@ -27,6 +27,7 @@ class DatapointStore {
             topics.DELETE_DATAPOINT,
             topics.MONITOR_DATAPOINT,
             topics.MARK_POSITIVE_VAR,
+            topics.MARK_NEGATIVE_VAR,
             topics.MODIFY_DATAPOINT
         ];
 
@@ -53,6 +54,9 @@ class DatapointStore {
                 break;
             case topics.MARK_POSITIVE_VAR:
                 processMsgMarkPositiveVar(data);
+                break;
+            case topics.MARK_NEGATIVE_VAR:
+                processMsgMarkNegativeVar(data);
                 break;
             case topics.LOAD_DATAPOINT_SLIDE:
                 processMsgLoadDatapointSlide(data);
@@ -203,7 +207,7 @@ class DatapointStore {
             }
         }
         if (this.activeLoop) {
-            setTimeout(this.requestLoop.bind(this),15000);
+            setTimeout(() => this.requestLoop.bind(this),15000);
         }
     }
 
@@ -399,8 +403,8 @@ function processMsgMonitorDatapoint (msgData) {
                 messageTime:(new Date).getTime()
             };
             PubSub.publish(topics.BAR_MESSAGE(),payload);
-            setTimeout(PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,{did:requestData.did, force:true}),5000);
-            setTimeout(PubSub.publish(topics.DATASOURCE_DATA_REQUEST,{did:requestData.did, force:true}),5000);
+            setTimeout(() => PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,{did:requestData.did, force:true}),5000);
+            setTimeout(() => PubSub.publish(topics.DATASOURCE_DATA_REQUEST,{did:requestData.did, force:true}),5000);
         })
         .fail( data => {
             if (data.responseJSON && data.responseJSON.error) {
@@ -432,15 +436,57 @@ function processMsgMarkPositiveVar (msgData) {
             },
         })
         .done( data => {
-            setTimeout(PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:msgData.pid, force:true}),5000);
-            setTimeout(PubSub.publish(topics.DATAPOINT_DATA_REQUEST,{pid:msgData.pid}),5000);
-            var dpPromise = datapointStore.getConfig({pid:pid});
+            setTimeout(() => PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:msgData.pid, force:true}),5000);
+            setTimeout(() => PubSub.publish(topics.DATAPOINT_DATA_REQUEST,{pid:msgData.pid}),5000);
+            var dpPromise = datapointStore.getConfig({pid:msgData.pid});
             dpPromise.then( config => {
                 if (config.hasOwnProperty('did')) {
-                    setTimeout(PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,
-                    {did:config.did, force:true}),5000);
-                    setTimeout(PubSub.publish(topics.DATASOURCE_DATA_REQUEST,
-                    {did:config.did, force:true}),5000);
+                    setTimeout(() => PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,
+                    {did:config.did}),5000);
+                    setTimeout(() => PubSub.publish(topics.DATASOURCE_DATA_REQUEST,
+                    {did:config.did}),5000);
+                }
+            });
+        })
+        .fail( data => {
+            if (data.responseJSON && data.responseJSON.error) {
+                var message = 'Error requesting operation. Code: '+data.responseJSON.error;
+            } else if (data.statusText) {
+                var message = 'Error requesting operation. '+data.statusText;
+            } else {
+                var message = 'Error requesting operation.';
+            }
+            var payload = {
+                message:{type:'danger',message:message},
+                messageTime:(new Date).getTime()
+            };
+            PubSub.publish(topics.BAR_MESSAGE(),payload);
+        });
+    }
+}
+
+function processMsgMarkNegativeVar (msgData) {
+    if (msgData.hasOwnProperty('pid') && msgData.hasOwnProperty('seq') && msgData.hasOwnProperty('p') && msgData.hasOwnProperty('l')) {
+        var requestData={seq:msgData.seq,p:msgData.p,l:msgData.l};
+        $.ajax({
+            url: '/etc/dp/'+msgData.pid+'/negatives/',
+            dataType: 'json',
+            type: 'POST',
+            data: JSON.stringify(requestData),
+            beforeSend: function(request) {
+                request.setRequestHeader("X-XSRFToken", getCookie('_xsrf'));
+            },
+        })
+        .done( data => {
+            setTimeout(() => PubSub.publish(topics.DATAPOINT_CONFIG_REQUEST,{pid:msgData.pid, force:true}),5000);
+            setTimeout(() => PubSub.publish(topics.DATAPOINT_DATA_REQUEST,{pid:msgData.pid}),5000);
+            var dpPromise = datapointStore.getConfig({pid:msgData.pid});
+            dpPromise.then( config => {
+                if (config.hasOwnProperty('did')) {
+                    setTimeout(() => PubSub.publish(topics.DATASOURCE_CONFIG_REQUEST,
+                    {did:config.did}),5000);
+                    setTimeout(() => PubSub.publish(topics.DATASOURCE_DATA_REQUEST,
+                    {did:config.did}),5000);
                 }
             });
         })
