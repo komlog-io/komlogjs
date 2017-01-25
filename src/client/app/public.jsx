@@ -25,17 +25,59 @@ class Header extends React.Component {
 }
 
 class Footer extends React.Component {
+    cookie = '_cookieConsent';
+
+    checkCookie (cname) {
+        var name = cname+'=';
+        var decodedCookie = decodeURIComponent(document.cookie);
+        var ca = decodedCookie.split(';');
+        for(var i = 0; i<ca.length; i++) {
+            var c = ca[i];
+            while (c.charAt(0) == ' ') {
+                c = c.substring(1);
+            }
+            if (c.indexOf(name) == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    setCookie = (cname, cvalue, exdays) => {
+        var d = new Date();
+        d.setTime(d.getTime() + (exdays*24*60*60*1000));
+        var expires = "expires="+ d.toUTCString();
+        var cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+        document.cookie = cookie;
+        this.setState({});
+    }
+
     render () {
+        var cookieAlert;
+        if (!this.checkCookie(this.cookie)) {
+            cookieAlert = (
+              <div id="cookie-alert">
+                <ReactBootstrap.Alert bsStyle="info" onDismiss={this.setCookie.bind(null, this.cookie, 'yesh', 365)}>
+                  We use cookies to offer you the best possible online experience. If you continue, we assume you are accepting our <a href="/cookies" className="alert-link">cookies policy</a>.
+                </ReactBootstrap.Alert>
+              </div>
+            );
+        } else {
+            cookieAlert=null;
+        }
         return (
           <footer>
             <div className="container">
                 <div className="col-xs-6">
                   <ul>
                     <li>
-                      <a href="/terms"><small>Terms and conditions</small></a>
+                      <a href="/terms"><small>Terms</small></a>
                     </li>
                     <li>
-                      <a href="/privacy"><small>Privacy policy</small></a>
+                      <a href="/privacy"><small>Privacy</small></a>
+                    </li>
+                    <li>
+                      <a href="/cookies"><small>Cookies</small></a>
                     </li>
                   </ul>
                 </div>
@@ -55,6 +97,7 @@ class Footer extends React.Component {
                   </ul>
                 </div>
             </div>
+            {cookieAlert}
           </footer>
         );
     }
