@@ -24,7 +24,11 @@ El usuario conoce y acepta que sus datos personales podrán ser facilitados a te
 
 En cumplimiento de la normativa vigente en materia de protección de datos, el Usuario podrá dirigir sus comunicaciones y ejercitar los derechos de acceso, rectificación, cancelación y oposición por correo ordinario dirigido a: KOMLOG (JUAN CAÑETE AZORÍN) C/MARTINEZ VILLERGAS 12, 3D, 28027 de Madrid. 
 
+<<<<<<< HEAD
 También podrá dirigirse a través de nuestro correo electrónico [hello@komlog.io](mailto:hello@komlog.io). 
+=======
+También podrá dirigirse a través de nuestro correo electrónico [hello@komlog.io](hello@komlog.io). 
+>>>>>>> 2d6b0591fb184580d3676fd5e5ec5f8c8b123489
 
 Para ejercer los derechos de cancelación y rectificación, y en cumplimiento del artículo 23  del RD 1720/2007, de 21 de diciembre, por el que se aprueba el Reglamento de desarrollo de la Ley Orgánica 15/1999 de Protección de Datos de Carácter Personal, es necesario que el Usuario acredite su personalidad frente a KOMLOG mediante el envío de fotocopia de Documento Nacional de Identidad o cualquier otro medio válido en Derecho.
 
