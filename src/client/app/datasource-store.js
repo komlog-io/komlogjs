@@ -219,6 +219,7 @@ class DatasourceStore {
                 requestType:type,
                 did:id,
                 interval:interval,
+                previousInterval: interval,
                 nextRequest:now + interval
             });
         }
@@ -233,7 +234,12 @@ class DatasourceStore {
         var reqArray=this._registeredRequests.filter(el => el.did == id && el.requestType == type );
         if (reqArray.length == 1 && reqArray[0].interval<1800000) {
             var now = new Date().getTime();
-            var interval = parseInt(reqArray[0].interval*1.2);
+            if (reqArray[0].previousInterval > reqArray[0].interval) {
+                var interval = parseInt(reqArray[0].interval+(reqArray[0].previousInterval-reqArray[0].interval)/2);
+            } else {
+                var interval = parseInt(reqArray[0].interval*1.2);
+            }
+            reqArray[0].previousInterval = reqArray[0].interval;
             reqArray[0].interval=interval;
             reqArray[0].nextRequest=now + interval;
         }
@@ -243,9 +249,14 @@ class DatasourceStore {
         var reqArray=this._registeredRequests.filter( el => el.did == id && el.requestType == type );
         if (reqArray.length == 1 && reqArray[0].interval>300000) {
             var now = new Date().getTime();
-            var interval = parseInt(reqArray[0].interval*0.8);
+            if (reqArray[0].previousInterval < reqArray[0].interval) {
+                var interval = parseInt(reqArray[0].interval-(reqArray[0].interval-reqArray[0].previousInterval)/2);
+            } else {
+                var interval = parseInt(reqArray[0].interval*0.8);
+            }
+            reqArray[0].previousInterval = reqArray[0].interval;
             reqArray[0].interval=interval;
-            reqArray[0].lastRequest=now + interval;
+            reqArray[0].nextRequest=now + interval;
         }
     }
 

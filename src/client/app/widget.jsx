@@ -1636,7 +1636,7 @@ class WidgetDp extends React.Component {
     async initialization () {
         var config = await getWidgetConfig(this.props.wid);
         var dpConfig = getDatapointConfig(config.pid);
-        var dpData = getDatapointData(config.pid);
+        var dpData = getDatapointData({pid:config.pid});
 
         var subscribedTopics = [
             topics.WIDGET_CONFIG_UPDATE(this.props.wid),
@@ -1657,6 +1657,14 @@ class WidgetDp extends React.Component {
             var nextTs = values[1].data.map( d => d.ts);
             var ets = Math.max.apply(null,nextTs);
             var its = Math.min.apply(null,nextTs);
+            if (ets == its) {
+                var now = new Date().getTime()/1000;
+                its -= 3600;
+                ets += 3600;
+                if (ets > now) {
+                    ets = now;
+                }
+            }
 
             var newState = {
                 interval:{its:its,ets:ets},
@@ -1743,8 +1751,11 @@ class WidgetDp extends React.Component {
         if (interval.ets > now) {
             interval.ets = now;
         }
-        var newData = getDatapointData(this.state.pid, interval);
-        newData.then( dpData => this.setState({live:live,interval:interval, data:dpData.data}));
+        var newData = getDatapointData({pid:this.state.pid, interval:interval});
+        newData.then( dpData => {
+            console.log('paso el getDatapointData');
+            this.setState({live:live,interval:interval, data:dpData.data});
+        });
     }
 
     snapshotIntervalCallback = (interval) => {
@@ -1774,16 +1785,18 @@ class WidgetDp extends React.Component {
     }
 
     async refreshData (interval) {
+        console.log('refreshdata',interval);
         var shouldUpdate = false;
         if ((this.state.live && interval.ets > this.state.interval.ets) ||
             (this.state.interval.ets >= interval.ets && this.state.interval.its <= interval.ets) ||
             (this.state.interval.its <= interval.its && this.state.interval.ets >= interval.its)) {
-            var newData = await getDatapointData(this.state.pid, interval);
+            var newData = await getDatapointData({pid:this.state.pid, interval:interval});
             //for new or different samples
             shouldUpdate = newData.data.some( d => {
                 var haveIt = this.state.data.some ( e => e.ts == d.ts && e.value == d.value);
                 return !haveIt;
             });
+            console.log('shouldUpdate new',shouldUpdate);
             //for deleted samples
             if (!shouldUpdate) {
                 var intervalData = this.state.data.filter( d => d.ts >= interval.its && d.ts <= interval.ets);
@@ -1791,6 +1804,7 @@ class WidgetDp extends React.Component {
                     shouldUpdate = true;
                 }
             }
+            console.log('shouldUpdate deleted',shouldUpdate);
         }
         if (shouldUpdate) {
             var newInt;
@@ -1802,8 +1816,8 @@ class WidgetDp extends React.Component {
             } else {
                 newInt = this.state.interval;
             }
-            newData = await getDatapointData(this.state.pid, newInt);
-            this.setState({data: newData.data, interval:newInterval});
+            newData = await getDatapointData({pid:this.state.pid, interval:newInt, onlyMissing:true});
+            this.setState({data: newData.data, interval:newInt});
         }
     }
 
@@ -1959,7 +1973,7 @@ class WidgetMp extends React.Component {
 
         config.datapoints.forEach( pid => {
             dpPromises.push(getDatapointConfig(pid));
-            dpPromises.push(getDatapointData(pid));
+            dpPromises.push(getDatapointData({pid:pid}));
             subscribedTopics.push(topics.DATAPOINT_CONFIG_UPDATE(pid));
             subscribedTopics.push(topics.DATAPOINT_DATA_UPDATE(pid));
             newState.config[pid]={};
@@ -1985,6 +1999,14 @@ class WidgetMp extends React.Component {
                 newState.interval.ets = Math.max.apply(null, etss);
                 var sumItss = itss.reduce((a, b) => a + b, 0);
                 newState.interval.its = sumItss/itss.length;
+                if (newState.interval.ets == newState.interval.its) {
+                    var now = new Date().getTime()/1000;
+                    newState.interval.its -= 3600;
+                    newState.interval.ets += 3600;
+                    if (newState.interval.ets > now) {
+                        newState.interval.ets = now;
+                    }
+                }
             }
 
             this.subscriptionTokens = subscribedTopics.map( topic => {
@@ -2076,7 +2098,10 @@ class WidgetMp extends React.Component {
         if (interval.ets > now) {
             interval.ets = now;
         }
-        var dpProm = Object.keys(this.state.config).map( pid => getDatapointData(pid, interval));
+        var dpProm = Object.keys(this.state.config).map( pid => {
+            console.log('El pid',pid);
+            return getDatapointData({pid:pid, interval:interval});
+        });
         Promise.all(dpProm).then( values => {
             var data = {};
             values.forEach(value => data[value.pid]=value.data);
@@ -2169,9 +2194,9 @@ class WidgetMp extends React.Component {
             shouldUpdate = true;
             addedPids.forEach( pid => {
                 if (interval.ets == null) {
-                    dpProm.push(getDatapointData(pid));
+                    dpProm.push(getDatapointData({pid:pid}));
                 } else {
-                    dpProm.push(getDatapointData(pid, this.state.interval));
+                    dpProm.push(getDatapointData({pid:pid, interval:this.state.interval}));
                 }
                 var confTopic = this.subscriptionTokens.some( d => {
                     return d.msg == topics.DATAPOINT_CONFIG_UPDATE(pid);
@@ -2245,7 +2270,7 @@ class WidgetMp extends React.Component {
         if ((this.state.live && interval.ets > this.state.interval.ets) ||
             (this.state.interval.ets >= interval.ets && this.state.interval.its <= interval.ets) ||
             (this.state.interval.its <= interval.its && this.state.interval.ets >= interval.its)) {
-            var newData = await getDatapointData(pid, interval);
+            var newData = await getDatapointData({pid:pid, interval:interval});
             //for new or different samples
             shouldUpdate = newData.data.some( d => {
                 var haveIt = this.state.data[pid].some ( e => e.ts == d.ts && e.value == d.value);
@@ -2270,7 +2295,7 @@ class WidgetMp extends React.Component {
                 Object.keys(this.state.data).forEach ( other_pid => {
                     if (other_pid != pid) {
                         data[other_pid] = this.state.data[other_pid].filter( d => {
-                            return d.ts <= interval.ets && d.ts >= interval.its;
+                            return d.ts <= newInt.ets && d.ts >= newInt.its;
                         });
                     }
                 });
@@ -2282,7 +2307,7 @@ class WidgetMp extends React.Component {
                     }
                 });
             }
-            newData = await getDatapointData(this.state.pid, newInt);
+            newData = await getDatapointData({pid:pid, interval:newInt, onlyMissing:true});
             data[pid]=newData.data;
             this.setState({data: data, interval:newInt});
         }

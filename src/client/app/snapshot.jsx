@@ -388,7 +388,7 @@ class SnapshotDp extends React.Component {
     subscriptionTokens = [];
 
     async initialization () {
-        var dpData = await getDatapointData(this.props.datapoint.pid, this.state.interval, this.props.tid);
+        var dpData = await getDatapointData({pid:this.props.datapoint.pid, interval:this.state.interval, tid:this.props.tid});
 
         var subscribedTopics = [
             topics.DATAPOINT_DATA_UPDATE(this.props.datapoint.pid)
@@ -456,7 +456,7 @@ class SnapshotDp extends React.Component {
         if (interval.ets>this.props.ets) {
             interval.ets=this.props.ets;
         }
-        var newData = getDatapointData(this.props.datapoint.pid, interval, this.props.tid);
+        var newData = getDatapointData({pid:this.props.datapoint.pid, interval:interval, tid:this.props.tid});
         newData.then( dpData => this.setState({interval:interval, data:dpData.data}));
     }
 
@@ -498,7 +498,7 @@ class SnapshotDp extends React.Component {
             } else {
                 newInt = this.state.interval;
             }
-            newData = await getDatapointData(this.props.datapoint.pid, newInt, this.props.tid);
+            newData = await getDatapointData({pid:this.props.datapoint.pid, interval:newInt, tid:this.props.tid});
             this.setState({data: newData.data, interval:newInterval});
         }
     }
@@ -621,7 +621,7 @@ class SnapshotMp extends React.Component {
         var newState = {};
 
         this.props.datapoints.forEach(dp => {
-            dpPromises.push(getDatapointData(dp.pid, this.state.interval, this.props.tid));
+            dpPromises.push(getDatapointData({pid:dp.pid, interval:this.state.interval, tid:this.props.tid}));
             subscribedTopics.push(topics.DATAPOINT_DATA_UPDATE(dp.pid));
         });
 
@@ -725,7 +725,7 @@ class SnapshotMp extends React.Component {
             interval.ets=this.props.ets;
         }
         var dpPromises = this.props.datapoints.map ( dp => {
-            return getDatapointData(dp.pid, interval, this.props.tid);
+            return getDatapointData({pid:dp.pid, interval:interval, tid:this.props.tid});
         });
         Promise.all(dpPromises).then( values => {
             var data = {};
@@ -787,7 +787,7 @@ class SnapshotMp extends React.Component {
                     }
                 });
             }
-            newData = await getDatapointData(pid, newInt);
+            newData = await getDatapointData({pid:pid, interval:newInt});
             data[pid]=newData.data;
             this.setState({data: data, interval:newInt});
         }
