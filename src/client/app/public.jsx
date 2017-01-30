@@ -287,7 +287,7 @@ class Forget extends React.Component {
         var banner = this.getBanner();
         var dialog = this.getDialog();
         return (
-          <div className="container">
+          <div className="container" style={{paddingBottom:'20px'}}>
             <div className="well">
               {banner}
               {dialog}
@@ -325,7 +325,7 @@ class Invite extends React.Component {
     render () {
         var banner = this.getBanner();
         return (
-        <div className="container">
+        <div className="container" style={{paddingBottom:'20px'}}>
           <div className="well">
             {banner}
             <h2>Request an Invitation</h2>
@@ -386,7 +386,7 @@ class SignIn extends React.Component {
     render () {
         var banner = this.getBanner();
         return (
-          <div className="container">
+          <div className="container" style={{paddingBottom:'20px'}}>
             <div className="well well-signin">
               <form className="form-signin" method="post" action="">
                 <h2 className="form-signin-heading text-center">Sign in</h2>
