@@ -94,18 +94,13 @@ a {
 
 .brand {
   position: fixed;
-  top: 0px;
-  left: 0px;
-  color: #00FF00;
+  top: 20px;
+  left: 10px;
   height: 50px;
-  font-size: 18px;
-  direction: rtl;
-  padding: 20px 20px 20px 10px;
-  font-family: "Courier New", Courier, monospace;
-}
-
-.brand::first-letter {
-  color: white;
+  width: 120px;
+  background-image: url('../img/brand.png');
+  background-size: 100px auto;
+  background-repeat: no-repeat;
 }
 
 .side-menu {
@@ -119,8 +114,8 @@ a {
   overflow-y: hidden;
   overflow-x: hidden;
   color: #eee;
-  background-color: #262B33;
-  border-right: 1px solid #262B33;
+  background-color: #262c31;
+  border-right: 1px solid #262c31;
   z-index: 1000;
   transition: left 0.1s;
 }
@@ -228,8 +223,8 @@ a {
   overflow-y: auto;
   overflow-x: hidden;
   color: #eee;
-  background-color: #262B33;
-  border-right: 1px solid #262B33;
+  background-color: #262c31;
+  border-right: 1px solid #262c31;
   z-index: 1000;
 }
 
@@ -703,7 +698,7 @@ a {
 
 .tree-item {
   cursor: pointer;
-  background-color: #262B33;
+  background-color: #262c31;
   line-height: 35px;
   position: relative;
 }
@@ -732,7 +727,7 @@ a {
 
 .list-item {
   cursor: pointer;
-  background-color: #262B33;
+  background-color: #262c31;
   line-height: 35px;
   position: relative;
   padding-left: 15px;

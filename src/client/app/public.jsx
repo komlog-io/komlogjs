@@ -1,25 +1,27 @@
 import React from 'react';
-import * as ReactBootstrap from 'react-bootstrap';
+import {Navbar, Nav, NavItem, Alert, Collapse} from 'react-bootstrap';
 
 
 class Header extends React.Component {
+    brand = require('./img/brand.png');
+
     render () {
-        var brand = "_< Komlog";
+        var className = this.props.transparent ? "navbar-transparent" : null;
         return (
-          <ReactBootstrap.Navbar inverse staticTop fluid>
-            <ReactBootstrap.Navbar.Header>
-              <ReactBootstrap.Navbar.Brand>
-                <a href="/">{brand}</a>
-              </ReactBootstrap.Navbar.Brand>
-              <ReactBootstrap.Navbar.Toggle />
-            </ReactBootstrap.Navbar.Header>
-            <ReactBootstrap.Navbar.Collapse>
-              <ReactBootstrap.Nav pullRight>
-                <ReactBootstrap.NavItem href="/login">Sign in</ReactBootstrap.NavItem>
-                <ReactBootstrap.NavItem href="/signup">Create account</ReactBootstrap.NavItem>
-              </ReactBootstrap.Nav>
-            </ReactBootstrap.Navbar.Collapse>
-          </ReactBootstrap.Navbar>
+          <Navbar className={className} staticTop fluid>
+            <Navbar.Header>
+              <Navbar.Brand>
+                <a href="/"><img src={this.brand} /></a>
+              </Navbar.Brand>
+              <Navbar.Toggle />
+            </Navbar.Header>
+            <Navbar.Collapse>
+              <Nav pullRight>
+                <NavItem href="/login">Sign in</NavItem>
+                <NavItem href="/signup">Create account</NavItem>
+              </Nav>
+            </Navbar.Collapse>
+          </Navbar>
         );
     }
 }
@@ -57,45 +59,67 @@ class Footer extends React.Component {
         if (!this.checkCookie(this.cookie)) {
             cookieAlert = (
               <div id="cookie-alert">
-                <ReactBootstrap.Alert bsStyle="info" onDismiss={this.setCookie.bind(null, this.cookie, 'yesh', 365)}>
+                <Alert bsStyle="info" onDismiss={this.setCookie.bind(null, this.cookie, 'yesh', 365)}>
                   We use cookies to offer you the best possible online experience. If you continue, we assume you are accepting our <a href="/cookies" className="alert-link">cookies policy</a>.
-                </ReactBootstrap.Alert>
+                </Alert>
               </div>
             );
         } else {
             cookieAlert=null;
         }
         return (
-          <footer>
+          <footer className="footer">
             <div className="container">
-                <div className="col-xs-6">
-                  <ul>
+              <div className="row">
+                <div className="col-lg-2  col-md-2 col-sm-4 col-xs-6">
+                  <div className="title">Legal</div>
+                  <ul className="list">
                     <li>
-                      <a href="/terms"><small>Terms</small></a>
+                      <a href="/terms">Terms</a>
                     </li>
                     <li>
-                      <a href="/privacy"><small>Privacy</small></a>
+                      <a href="/privacy">Privacy</a>
                     </li>
                     <li>
-                      <a href="/cookies"><small>Cookies</small></a>
-                    </li>
-                  </ul>
-                </div>
-                <div className="col-xs-6">
-                  <ul style={{textAlign:'right'}}>
-                    <li>
-                      <small>
-                        Made with{' '}
-                        <span className="glyphicon glyphicon-heart text-danger"></span>
-                        {' '}by <strong>Komlog</strong>
-                      </small>
-                    </li>
-                    <li>
-                      <a className="mail" href="mailto:hello@komlog.io"></a>
-                      <a className="twitter" href="https://www.twitter.com/komlog_"></a>
+                      <a href="/cookies">Cookies</a>
                     </li>
                   </ul>
                 </div>
+                <div className="col-lg-2  col-md-2 col-sm-4 col-xs-6">
+                  <div className="title">DEVELOPERS</div>
+                  <ul className="list">
+                    <li>
+                      <a href="https://github.com/komlog-io">Github</a>
+                    </li>
+                    <li>
+                      <a href="https://groups.google.com/d/forum/komlog">Mailing List</a>
+                    </li>
+                    <li>
+                      #komlog at Freenode
+                    </li>
+                  </ul>
+                </div>
+                <div className="col-lg-2  col-md-2 col-sm-4 col-xs-6">
+                  <div className="title">CONTACT</div>
+                  <ul className="list">
+                    <li>
+                      <a href="mailto:hello@komlog.io"><span className="mail" />Mail</a>
+                    </li>
+                    <li>
+                      <a href="https://www.twitter.com/komlog_"><span className="twitter"/>Twitter</a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div style={{textAlign:'center',paddingTop:'20px'}}>
+                <small>
+                  © 2017 Made with{' '}
+                  <span className="glyphicon glyphicon-heart text-danger"></span>
+                  {' '}by <strong>Komlog</strong>
+                </small>
+              </div>
             </div>
             {cookieAlert}
           </footer>
@@ -104,83 +128,63 @@ class Footer extends React.Component {
 }
 
 class Root extends React.Component {
+    home_bg = require('./img/home_bg.jpg');
+
     render () {
         return (
-          <div className="container">
-            <div className="row">
-              <div className="col-xs-12">
-                <h4>
-                  <p>
-                    Komlog is a flexible and powerful event based processing platform, aimed at <strong>processing and visualizing time series</strong>.<br />
-                  </p>
-                  <p>
-                    With Komlog you can model your time series and create distributed applications that react to updates on those models, making Komlog a useful platform for any <strong>data driven organization</strong> or <strong>data scientist</strong>.
-                  </p>
-                </h4>
-                <p />
+          <div>
+            <div className="home-bg">
+              <img src={this.home_bg} width={2333}/>
+              <div className="home-slogan">
+                <span style={{marginLeft:'-5%',fontWeight:700}}>Built</span>{' '}for the<br />
+                <span style={{fontWeight:700,color:'#011c39'}}>Data Driven</span>
               </div>
             </div>
-              <h1 className="page-header"> </h1>
-              <div className="col-md-4 col-sm-6">
-                <div className="panel panel-default">
-                  <div className="panel-heading">
-                    <h4><i className="glyphicon glyphicon-stats"></i> Visualize Data in Minutes</h4>
-                  </div>
-                  <div className="panel-body">
-                    <h5>Visualize data from any CLI or script output, directly from plain texts.</h5>
-                  </div>
+            <div className="description">
+              <div className="container">
+                Komlog is a flexible and powerful event based processing platform, aimed at <strong>visualizing and sharing time series</strong>. It helps you structure your time series and create applications that use them in real time, making it a useful platform for <strong>data driven organizations</strong> and <strong>data enthusiasts</strong>.
+              </div>
+            </div>
+            <div className="separator" />
+            <div className="features">
+              <div className="container">
+                <div className="col-md-4 col-sm-6 feature-box">
+                  <div className="glyphicon glyphicon-stats home-icon" />
+                  <h3>Visualize Data in Minutes</h3>
+                  Visualize data from any CLI or script output, directly from plain texts.
+                </div>
+                <div className="col-md-4 col-sm-6 feature-box">
+                  <div className="glyphicon glyphicon-cloud home-icon" />
+                  <h3>Cloud Agnostic</h3>
+                  Run Komlog daemons on any cloud provider, on your own servers or both.
+                </div>
+                <div className="col-md-4 col-sm-6 feature-box">
+                  <div className="glyphicon glyphicon-transfer home-icon" />
+                  <h3>Be Data Driven</h3>
+                  Build applications that react to changes in your models in real time.
+                </div>
+                <div className="col-md-4 col-sm-6 feature-box">
+                  <div className="glyphicon glyphicon-gift home-icon" />
+                  <h3>Free Plan</h3>
+                  Start with a free plan and upgrade it according to your needs.
+                </div>
+                <div className="col-md-4 col-sm-6 feature-box">
+                  <div className="glyphicon glyphicon-bullhorn home-icon" />
+                  <h3>Build the IoT</h3>
+                  Share your time series in real time and let others build applications over them.
+                </div>
+                <div className="col-md-4 col-sm-6 feature-box">
+                  <div className="glyphicon glyphicon-comment home-icon"/>
+                  <h3>Join the Conversation</h3>
+                  Get in touch with us, get help and give us your feedback.
                 </div>
               </div>
-              <div className="col-md-4 col-sm-6">
-                <div className="panel panel-default">
-                  <div className="panel-heading">
-                    <h4><i className="glyphicon glyphicon-cloud"></i> Cloud Agnostic</h4>
-                  </div>
-                  <div className="panel-body">
-                    <h5> Run Komlog daemons on any cloud provider, on your own servers or both.</h5>
-                  </div>
-                </div>
+            </div>
+            <div className="big-separator">
+              <div style={{textAlign:'center'}}>
+                <a className="btn btn-join" href="/signup">CREATE ACCOUNT</a>
               </div>
-              <div className="col-md-4 col-sm-6">
-                <div className="panel panel-default">
-                  <div className="panel-heading">
-                    <h4><i className="glyphicon glyphicon-transfer"></i> Be Data Driven</h4>
-                  </div>
-                  <div className="panel-body">
-                    <h5>Build applications that react to changes in your models in real time.</h5>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-4 col-sm-6">
-                <div className="panel panel-default">
-                  <div className="panel-heading">
-                    <h4><i className="glyphicon glyphicon-gift"></i> Free Plan</h4>
-                  </div>
-                  <div className="panel-body">
-                    <h5> Start with a free plan and upgrade it according to your needs.</h5>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-4 col-sm-6">
-                <div className="panel panel-default">
-                  <div className="panel-heading">
-                    <h4><i className="glyphicon glyphicon-globe"></i> Build the IoT </h4>
-                  </div>
-                  <div className="panel-body">
-                    <h5>Share your data models and build applications that use them.</h5>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-4 col-sm-6">
-                <div className="panel panel-default">
-                  <div className="panel-heading">
-                    <h4><i className="glyphicon glyphicon-comment"></i> Join the Conversation</h4>
-                  </div>
-                  <div className="panel-body">
-                    <h5>Get in touch with us, get help and give us your feedback.</h5>
-                  </div>
-                </div>
-              </div>
+            </div>
           </div>
         );
     }
@@ -341,7 +345,7 @@ class Invite extends React.Component {
             <br />
             <h6><a href="#" onClick={this.switchCollapse}>Already got an invitation?</a></h6>
             <br />
-            <ReactBootstrap.Collapse in={this.state.open}>
+            <Collapse in={this.state.open}>
               <div>
                 <form className="form-inline" method="get" action="/signup/">
                   <div className="form-group">
@@ -355,7 +359,7 @@ class Invite extends React.Component {
                   </div>
                 </form>
               </div>
-            </ReactBootstrap.Collapse>
+            </Collapse>
           </div>
         </div>
         );

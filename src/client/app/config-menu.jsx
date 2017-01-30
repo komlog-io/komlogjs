@@ -69,7 +69,7 @@ class ConfigMenu extends React.Component {
           <div>
             <div className="side-config-menu">
               <a href="/home">
-                <div className="brand">{"_< Komlog"}</div>
+                <div className="brand"></div>
               </a>
               {menuIndex}
             </div>
