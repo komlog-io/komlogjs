@@ -6,7 +6,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "webpack --progress -d",
-    "build": "webpack --progress -p --config ./webpack.production.config.js"
+    "build": "webpack --progress -p",
+    "deploy": "webpack --progress -p --config ./webpack.production.config.js"
   },
   "author": "Komlog",
   "license": "ISC",

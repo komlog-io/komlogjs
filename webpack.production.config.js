@@ -1,5 +1,6 @@
 var webpack = require('webpack');
 var path = require('path');
+var S3Plugin = require('webpack-s3-plugin')
 
 var BUILD_DIR = path.resolve(__dirname, 'src/client/public');
 var APP_DIR = path.resolve(__dirname, 'src/client/app');
@@ -20,7 +21,7 @@ var config = {
   },
   output: {
     path: BUILD_DIR,
-    publicPath: '/static/',
+    publicPath: 'https://d2kfara9vrwhb0.cloudfront.net/',
     filename: '[name].js',
   },
   plugins: [
@@ -36,6 +37,18 @@ var config = {
       },
       comments: false,
     }),
+    new S3Plugin({
+      s3Options: {
+        region: 'eu-central-1'
+      },
+      s3UploadOptions: {
+        Bucket: 'kstc',
+      },
+      cloudfrontInvalidateOptions: {
+        DistributionId: 'ESKS7DEU7P0FX',
+        Items: ["/*"]
+      }
+    })
   ],
   module : {
     loaders : [
