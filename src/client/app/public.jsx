@@ -3,15 +3,13 @@ import {Navbar, Nav, NavItem, Alert, Collapse} from 'react-bootstrap';
 
 
 class Header extends React.Component {
-    brand = require('./img/brand.png');
-
     render () {
         var className = this.props.transparent ? "navbar-transparent" : null;
         return (
           <Navbar className={className} staticTop fluid>
             <Navbar.Header>
               <Navbar.Brand>
-                <a href="/"><img src={this.brand} /></a>
+                <a href="/" className="brand" />
               </Navbar.Brand>
               <Navbar.Toggle />
             </Navbar.Header>

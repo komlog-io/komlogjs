@@ -94,12 +94,25 @@ a {
 
 .brand {
   position: fixed;
-  top: 20px;
-  left: 10px;
+  top: 0px;
+  left: 0px;
   height: 50px;
   width: 120px;
   background-image: url('../img/brand.png');
   background-size: 100px auto;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.brand-black {
+  position: fixed;
+  top: 0px;
+  left: 0px;
+  height: 50px;
+  width: 120px;
+  background-image: url('../img/brand-black.png');
+  background-size: 100px auto;
+  background-position: center;
   background-repeat: no-repeat;
 }
 

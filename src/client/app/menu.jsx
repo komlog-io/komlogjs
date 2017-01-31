@@ -327,7 +327,7 @@ class SideMenu extends React.Component {
         var content = this.getContent();
         return (
           <div>
-            <div className="brand"></div>
+            <div className="brand" />
             <MenuToolBar />
             <div className="side-menu-tabs">
               <ReactBootstrap.Tabs activeKey={this.state.activeTab} onSelect={this.switchTab} id="menu">

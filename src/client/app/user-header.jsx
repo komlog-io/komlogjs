@@ -97,6 +97,9 @@ class UserHeader extends React.Component {
         return (
           <ReactBootstrap.Navbar staticTop fluid>
             <ReactBootstrap.Navbar.Header>
+              <ReactBootstrap.Navbar.Brand>
+                <div className="brand-black" />
+              </ReactBootstrap.Navbar.Brand>
               <ReactBootstrap.Navbar.Toggle />
             </ReactBootstrap.Navbar.Header>
             <ReactBootstrap.Navbar.Collapse>
