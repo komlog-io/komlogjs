@@ -37,8 +37,6 @@ class ConfigMenu extends React.Component {
         } else if (this.state.activeSubMenu == 1) {
             return <AgentSubMenu />
         } else if (this.state.activeSubMenu == 2) {
-            return <BillingSubMenu />
-        } else if (this.state.activeSubMenu == 3) {
             return <SharedUriSubMenu />
         }
     }
@@ -47,8 +45,7 @@ class ConfigMenu extends React.Component {
         var items = [
             {key: "0", label: "Account"},
             {key: "1", label: "Agents"},
-            {key: "2", label: "Billing"},
-            {key: "3", label: "Shared"},
+            {key: "2", label: "Shared"},
         ]
         var menuItems = items.map( item => {
             var classname = this.state.activeSubMenu == parseInt(item.key) ? 'list-item-active' : 'list-item';
