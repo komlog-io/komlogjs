@@ -93,7 +93,7 @@ class Footer extends React.Component {
                       <a href="https://groups.google.com/d/forum/komlog">Mailing List</a>
                     </li>
                     <li>
-                      #komlog at Freenode
+                      <a href="https://gitter.im/komlog_">Gitter community</a>
                     </li>
                   </ul>
                 </div>
