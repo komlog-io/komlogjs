@@ -176,6 +176,11 @@ class Root extends React.Component {
                   <h3>Join the Conversation</h3>
                   Get in touch with us, get help and give us your feedback.
                 </div>
+                <div className="col-md-10 col-md-offset-1 col-sm-12 video-box">
+                  <div className="embed-responsive embed-responsive-16by9">
+                    <iframe className="embed-responsive-item" src="https://www.youtube.com/embed/y_oeB5mcAT4"></iframe>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="big-separator">

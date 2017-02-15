@@ -130,6 +130,10 @@ body {
   height: 220px;
 }
 
+.video-box {
+  padding-bottom: 20px;
+}
+
 .well-signin {
   max-width: 430px;
   margin: 0 auto;
