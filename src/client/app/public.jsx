@@ -127,6 +127,11 @@ class Footer extends React.Component {
 
 class Root extends React.Component {
     home_bg = require('./img/home_bg.jpg');
+    api_img = require('./img/apiintegrations.png');
+    ts_img  = require('./img/timeseriestructure.png');
+    gr_img  = require('./img/groupmetrics.png');
+    sh_img  = require('./img/sharegraph.png');
+
 
     render () {
         return (
@@ -140,41 +145,65 @@ class Root extends React.Component {
             </div>
             <div className="description">
               <div className="container">
-                Komlog is a flexible and powerful event based processing platform, aimed at <strong>visualizing and sharing time series</strong>. It helps you structure your time series and create applications that use them in real time, making it a useful platform for <strong>data driven organizations</strong> and <strong>data enthusiasts</strong>.
+                Komlog is a flexible and powerful event-based platform, aimed at <strong>time series visualization and analysis</strong>. It helps you structure your time series and create <strong>real-time applications</strong> based on them, making it a useful platform for any <strong>data driven organization</strong> or <strong>data scientist</strong>.
               </div>
             </div>
             <div className="separator" />
             <div className="features">
               <div className="container">
-                <div className="col-md-4 col-sm-6 feature-box">
-                  <div className="glyphicon glyphicon-stats home-icon" />
-                  <h3>Visualize Data in Minutes</h3>
-                  Visualize data from any CLI or script output, directly from plain texts.
+                <div className="row feature-box">
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <h3 style={{color:'#0cbda9'}}>Create time series based applications</h3>
+                    Komlog allows you to structure your time series and create applications that react to changes on them in real-time. Any time series based process or procedure can be integrated in Komlog and transform your company into a data-driven one.
+                  </div>
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <img src={this.ts_img}/>
+                  </div>
                 </div>
-                <div className="col-md-4 col-sm-6 feature-box">
-                  <div className="glyphicon glyphicon-cloud home-icon" />
-                  <h3>Cloud Agnostic</h3>
-                  Run Komlog daemons on any cloud provider, on your own servers or both.
+                <div className="row feature-box hidden-md hidden-lg">
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <h3 style={{color:'#0cbda9'}}>Include Komlog within your stack</h3>
+                    You can easily integrate Komlog functionality into your current stack with our API. No matter the applications you use, Komlog can extract your time series even from plain texts.
+                  </div>
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <img src={this.api_img} />
+                  </div>
                 </div>
-                <div className="col-md-4 col-sm-6 feature-box">
-                  <div className="glyphicon glyphicon-transfer home-icon" />
-                  <h3>Be Data Driven</h3>
-                  Build applications that react to changes in your models in real time.
+                <div className="row feature-box hidden-sm hidden-xs">
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <img src={this.api_img} />
+                  </div>
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <h3 style={{color:'#0cbda9'}}>Include Komlog within your stack</h3>
+                    You can easily integrate Komlog functionality into your current stack with our API. No matter the applications you use, Komlog can extract your time series even from plain texts.
+                  </div>
                 </div>
-                <div className="col-md-4 col-sm-6 feature-box">
-                  <div className="glyphicon glyphicon-gift home-icon" />
-                  <h3>Free Plan</h3>
-                  Start with a free plan and upgrade it according to your needs.
+                <div className="row feature-box">
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <h3 style={{color:'#0cbda9'}}>Visualize your processes in real time</h3>
+                    Combine your data to create graphs and group them on dashboards to see your organization's state in real time.
+                  </div>
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <img src={this.gr_img} />
+                  </div>
                 </div>
-                <div className="col-md-4 col-sm-6 feature-box">
-                  <div className="glyphicon glyphicon-bullhorn home-icon" />
-                  <h3>Build the IoT</h3>
-                  Share your time series in real time and let others build applications over them.
+                <div className="row feature-box hidden-md hidden-lg">
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <h3 style={{color:'#0cbda9'}}>Team work batteries included</h3>
+                    Komlog is designed with team work in mind. It allows you and your organization to share and use your data based on your needs. Share dashboards and graph ranges or full time series structures secure and easily.
+                  </div>
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <img src={this.sh_img} />
+                  </div>
                 </div>
-                <div className="col-md-4 col-sm-6 feature-box">
-                  <div className="glyphicon glyphicon-comment home-icon"/>
-                  <h3>Join the Conversation</h3>
-                  Get in touch with us, get help and give us your feedback.
+                <div className="row feature-box hidden-sm hidden-xs">
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <img src={this.sh_img} />
+                  </div>
+                  <div className="col-md-6 col-sm-12 vcenter">
+                    <h3 style={{color:'#0cbda9'}}>Team work batteries included</h3>
+                    Komlog is designed with team work in mind. It allows you and your organization to share and use your data based on your needs. Share dashboards and graph ranges or full time series structures secure and easily.
+                  </div>
                 </div>
                 <div className="col-md-10 col-md-offset-1 col-sm-12 video-box">
                   <div className="embed-responsive embed-responsive-16by9">
@@ -185,7 +214,7 @@ class Root extends React.Component {
             </div>
             <div className="big-separator">
               <div style={{textAlign:'center'}}>
-                <a className="btn btn-join" href="/signup">CREATE ACCOUNT</a>
+                <a className="btn btn-join" href="/signup">CREATE FREE ACCOUNT</a>
               </div>
             </div>
           </div>

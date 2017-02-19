@@ -126,11 +126,27 @@ body {
   padding-top: 30px;
 }
 
+.vcenter {
+  display: inline-block;
+  vertical-align: middle;
+  float: none;
+  padding-bottom: 10px;
+}
+
+.vcenter img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: auto;
+}
+
 .feature-box {
-  height: 220px;
+  min-height: 350px;
+  padding-bottom: 20px;
 }
 
 .video-box {
+  padding-top: 10px;
   padding-bottom: 20px;
 }
 
