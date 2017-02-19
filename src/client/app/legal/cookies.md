@@ -49,6 +49,18 @@ A continuación relacionamos las cookies que emplea nuestro sitio web, junto a l
       <td>Cookie que contiene información de la sesión cuando el usuario hace login en Komlog.</td>
       <td></td>
     </tr>
+    <tr>
+      <th rowspan="2">Cookies de terceros</th>
+      <td rowspan="2">Google Analytics</td>
+      <td>_gat</td>
+      <td>Recopila información anónima sobre la navegación de los usuarios por el sitio web con el fin de conocer el origen de las visitas y otros datos estadísticos.</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td>_ga</td>
+      <td>Recopila información anónima sobre la navegación de los usuarios por el sitio web con el fin de conocer el origen de las visitas y otros datos estadísticos.</td>
+      <td></td>
+    </tr>
   </tbody>
 </table>
 </div>
