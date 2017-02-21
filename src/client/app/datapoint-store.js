@@ -362,6 +362,7 @@ class DatapointStore {
             data.sort( (a,b) => a.ts - b.ts);
             return data.slice(Math.max(data.length - 200, 0));
         } else {
+            data.sort( (a,b) => a.ts - b.ts);
             return data;
         }
     }
@@ -478,6 +479,7 @@ class DatapointStore {
                 this.addRegisteredRequest(pid,'requestDatapointData',60000);
             }
             this._datapointData[pid]={};
+            data.sort( (a,b) => a.ts - b.ts);
             Object.keys(data).forEach( key => {
                 this._datapointData[pid][data[key].ts]=data[key].value;
             });
