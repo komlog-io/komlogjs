@@ -413,7 +413,7 @@ let d3Linegraph = {
 
         function make_y_axis() {
             return d3.axisRight(y)
-            .ticks(4);
+            .ticks(4,",f");
         }
 
         function adjust_y_axis_text(selection) {
@@ -442,7 +442,6 @@ let d3Linegraph = {
                 .duration(300)
                 .call(make_y_axis()
                     .tickSize(width, 0, 0)
-                    .tickFormat("")
                 );
 
             svg.select('.y-axis')
@@ -450,7 +449,6 @@ let d3Linegraph = {
                 .duration(300)
                 .call(make_y_axis()
                     .tickSize(0, 0, 0)
-                    .tickFormat(d3.format("s"))
                 )
                 .call(adjust_y_axis_text);
         }
@@ -871,7 +869,6 @@ let d3Histogram = {
                 .duration(300)
                 .call(make_y_axis()
                     .tickSize(width, 0, 0)
-                    .tickFormat("")
                 );
 
             svg.select('.y-axis')
@@ -1080,8 +1077,7 @@ let d3SummaryLinegraph = {
         function make_y_axis() {
             return d3.axisRight(y)
             .tickSize(width, 0, 0)
-            .tickFormat("")
-            .ticks(4);
+            .ticks(4,",f");
         }
         function adjust_y_axis_text(selection) {
             selection.selectAll('.y-axis text')
@@ -1091,8 +1087,7 @@ let d3SummaryLinegraph = {
             .ticks(3)
             .tickFormat(customTimeFormat);
         var yAxis = d3.axisRight(y)
-            .ticks(4)
-            .tickFormat(d3.format("s"));
+            .ticks(4,",f");
         var svg = d3.select(el).append("svg")
             .attr("width", width + margin.left + margin.right)
             .attr("height", height + margin.top + margin.bottom)
@@ -1118,7 +1113,6 @@ let d3SummaryLinegraph = {
             .attr("class", "grid")
             .call(make_y_axis()
             .tickSize(width, 0, 0)
-            .tickFormat("")
             );
         svg.append("g")
             .attr("class", "x-axis")
