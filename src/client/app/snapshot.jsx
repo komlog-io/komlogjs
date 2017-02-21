@@ -49,6 +49,10 @@ class Snapshot extends React.Component {
     shouldComponentUpdate (nextProps, nextState) {
         if (this.state.conf != nextState.conf) {
             return true;
+        } else if (this.state.downloadCounter != nextState.downloadCounter) {
+            return true;
+        } else if (this.state.shareCounter != nextState.shareCounter) {
+            return true;
         }
         return false;
     }
