@@ -7,6 +7,7 @@ import * as utils from './utils.js';
 import {getWidgetConfig} from './widget-store.js';
 import {getDatasourceConfig, getDatasourceData, getDatasourceSnapshotData} from './datasource-store.js';
 import {getDatapointConfig, getDatapointData} from './datapoint-store.js';
+import {getNodeInfoByUri} from './uri-store.js';
 import {d3TimeSlider, d3Linegraph, d3Histogram} from './graphs.jsx';
 import {topics, styles} from './types.js';
 
@@ -2498,8 +2499,33 @@ class TimeSlider extends React.Component {
 
 class ContentLinegraph extends React.Component {
     state = {
-        zoomInterval: {its:0,ets:0}
+        zoomInterval: {its:0,ets:0},
+        anomalies: [],
+        anomPid: null,
     };
+
+    subscriptionTokens = [];
+
+    async initialization () {
+        if (this.props.data.length == 1) {
+            var anomUri = this.props.data[0].datapointname+'._k.anomaly';
+            var anomDp = await getNodeInfoByUri(anomUri)
+            if (anomDp && anomDp.hasOwnProperty('id') && anomDp.hasOwnProperty('type') && anomDp.type == 'p') {
+                var subscribedTopics = [
+                    topics.DATAPOINT_DATA_UPDATE(anomDp.id)
+                ];
+                this.subscriptionTokens = subscribedTopics.map( topic => {
+                    return {
+                        token:PubSub.subscribe(topic,this.subscriptionHandler),
+                        msg:topic
+                    }
+                });
+                var anomData = await getDatapointData({pid:anomDp.id, interval:this.props.interval, onlyMissing:true});
+                var anomalies = this.getAnomalies(anomData.data);
+                this.setState({anomPid:anomDp.id, anomalies:anomalies});
+            }
+        }
+    }
 
     notifyNewInterval = (interval) => {
         this.setState({zoomInterval:interval});
@@ -2520,12 +2546,71 @@ class ContentLinegraph extends React.Component {
 
     componentDidMount () {
         var el = ReactDOM.findDOMNode(this);
-        d3Linegraph.create(el, this.props.data, this.props.interval, this.notifyNewInterval);
+        d3Linegraph.create(el, this.props.data, this.props.interval, this.notifyNewInterval, {anomalies:this.state.anomalies});
+        this.initialization();
+    }
+
+    componentWillUnmount () {
+        this.subscriptionTokens.forEach( d => {
+            PubSub.unsubscribe(d.token);
+        });
     }
 
     componentDidUpdate () {
         var el = ReactDOM.findDOMNode(this);
-        d3Linegraph.update(el, this.props.data, this.props.interval, this.notifyNewInterval);
+        d3Linegraph.update(el, this.props.data, this.props.interval, this.notifyNewInterval, {anomalies:this.state.anomalies});
+    }
+
+    subscriptionHandler = (msg,data) => {
+        var msgType = msg.split('-')[0];
+        switch (msgType) {
+            case topics.DATAPOINT_DATA_UPDATE():
+                this.refreshAnomalies(data.interval);
+                break;
+        }
+    }
+
+    getAnomalies (data) {
+        var active = false;
+        var anomalies = [];
+        var interval = [null,null];
+        data.forEach( d => {
+            if (active == false && d.value > 0) {
+                active = true;
+                interval[0]=d.ts;
+            } else if (active == true && d.value == 0) {
+                active = false;
+                interval[1]=d.ts;
+                anomalies.push(interval);
+                interval = [null,null];
+            }
+        });
+        if (active) {
+            interval[1]=data[data.length-1].ts;
+            anomalies.push(interval);
+        }
+        return anomalies;
+    }
+
+    async refreshAnomalies (interval) {
+        if (interval.its >= this.props.interval.its && interval.ets <= this.props.interval.ets) {
+            var newData = await getDatapointData({pid:this.state.anomPid, interval:this.props.interval, onlyMissing: true});
+            var anomalies = this.getAnomalies(newData.data);
+            var shouldUpdate = false;
+            if (anomalies.length != this.state.anomalies.length ) {
+                shouldUpdate = true;
+            } else {
+                for (var i=0,j=anomalies.length; i<j; i++) {
+                    if (anomalies[i][0] != this.state.anomalies[i][0] || anomalies[i][1] != this.state.anomalies[i][1]) {
+                        shouldUpdate = true;
+                        break;
+                    }
+                }
+            }
+            if (shouldUpdate) {
+                this.setState({anomalies:anomalies});
+            }
+        }
     }
 
     render () {

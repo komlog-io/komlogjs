@@ -298,7 +298,7 @@ let d3TimeSlider = {
 }
 
 let d3Linegraph = {
-    create: function (el, data, interval, newIntervalCallback) {
+    create: function (el, data, interval, newIntervalCallback, metadata) {
         var margin = {top: 0, right: 0, bottom: 40, left: 0},
             height = 220 - margin.top - margin.bottom,
             width=d3.select(el).node().getBoundingClientRect().width-margin.left;
@@ -320,6 +320,9 @@ let d3Linegraph = {
         svg.append("g")
             .attr("class", "y-axis")
             .style('shape-rendering','crispEdges');
+
+        svg.append('g')
+            .attr('class', 'anomalies');
 
         var dateTooltip = svg.append('g')
             .attr('class', 'date-tooltip')
@@ -348,10 +351,10 @@ let d3Linegraph = {
             .attr('y2',height)
             .attr('stroke', '#aaa');
 
-        this.update(el, data, interval, newIntervalCallback);
+        this.update(el, data, interval, newIntervalCallback, metadata);
     },
 
-    update: function (el, data, interval, newIntervalCallback) {
+    update: function (el, data, interval, newIntervalCallback, metadata) {
         var mouseIn = null,
             x = null,
             y = null,
@@ -453,6 +456,30 @@ let d3Linegraph = {
                 .call(adjust_y_axis_text);
         }
 
+        function update_anomalies () {
+            console.log('anomalias',metadata);
+            var anomalies = svg.select('.anomalies');
+
+            var anomaly = anomalies.selectAll('.anomaly')
+                .data(metadata.anomalies, d => d[0])
+
+            anomaly.attr("x", d => x(new Date(d[0]*1000)))
+                .attr("width", d => x(new Date(d[1]*1000))-x(new Date(d[0]*1000)));
+
+            anomaly.exit()
+                .remove();
+
+            anomaly.enter()
+                .append("rect")
+                .attr("class", "anomaly")
+                .attr("x", d => x(new Date(d[0]*1000)))
+                .attr("y", 0)
+                .attr("width", d => x(new Date(d[1]*1000))-x(new Date(d[0]*1000)))
+                .attr("height", height)
+                .style("fill", "pink")
+                .style("opacity", 0.4);
+        }
+
         function update_lines () {
 
             var line = d3.line()
@@ -485,6 +512,7 @@ let d3Linegraph = {
             update_axis_domains();
             update_x_axis();
             update_y_axis();
+            update_anomalies();
             update_lines();
         }
 
@@ -493,6 +521,7 @@ let d3Linegraph = {
         update_axis_domains();
         update_x_axis();
         update_y_axis();
+        update_anomalies();
         update_lines();
 
         var focus_enter = svg.selectAll(".focus")
