@@ -432,7 +432,7 @@ class DatapointStore {
 
     speedUpRequest (id, type) {
         var reqArray=this._registeredRequests.filter( el => el.pid == id && el.requestType == type );
-        if (reqArray.length == 1 && reqArray[0].interval>60000) {
+        if (reqArray.length == 1 && reqArray[0].interval>30000) {
             var now = new Date().getTime();
             if (reqArray[0].previousInterval < reqArray[0].interval) {
                 var interval = parseInt(reqArray[0].interval-(reqArray[0].interval-reqArray[0].previousInterval)/2);
