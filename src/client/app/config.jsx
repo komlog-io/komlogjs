@@ -5,6 +5,7 @@ import {AlertArea} from './alert.jsx';
 import {ConfigMenu} from './config-menu.jsx';
 import 'bootstrap/dist/css/bootstrap.css';
 import './css/style.css';
+import './img/icons/favicon.png';
 
 
 document.addEventListener("DOMContentLoaded", function(event) {

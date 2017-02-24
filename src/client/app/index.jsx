@@ -7,6 +7,7 @@ import {EventsSideBar} from './event.jsx';
 import {Workspace} from './workspace.jsx';
 import 'bootstrap/dist/css/bootstrap.css';
 import './css/style.css';
+import './img/icons/favicon.png';
 
 
 document.addEventListener("DOMContentLoaded", function(event) {

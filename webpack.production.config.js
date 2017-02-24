@@ -64,6 +64,7 @@ var config = {
       { test: /\.svg(\?v=\d+\.\d+\.\d+)?$/, loader: "url?limit=10000&mimetype=image/svg+xml" },
       { test: /\.png(\?v=\d+\.\d+\.\d+)?$/, loader: "url?limit=10000&mimetype=image/png" },
       { test: /\.jpg(\?v=\d+\.\d+\.\d+)?$/, loader: "url?limit=10000&mimetype=image/jpg" },
+      { test: /favicon\.png$/, loader: 'file?name=[name].[ext]'},
     ],
   },
 };
