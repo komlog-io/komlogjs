@@ -360,63 +360,18 @@ class WidgetConfigDs extends React.Component {
         this.props.closeCallback();
     }
 
-    getFeedbackModalContent () {
-        var elements = this.generateHtmlContent();
-        var element_nodes=elements.map( element => {
-            if (element.type == 'text') {
-                return <span key={element.ne}>{element.data}</span>;
-            } else if (element.type == 'nl') {
-                return <br key={element.ne} />;
-            } else if (element.type == 'datapoint') {
-                var title=<div>This value belongs to <strong>{element.datapointname}</strong>?</div>
-                var popover=(
-                  <ReactBootstrap.Popover style={{zIndex:1260, wordWrap:"break-word"}} id='dpvalidation' title={title}>
-                    <div className="row">
-                      <div className="col-xs-4 col-xs-offset-2">
-                        <ReactBootstrap.Button bsSize="xsmall" bsStyle="success" onClick={this.onClickDatapointYes.bind(null, element.pid, element.p, element.l)}>Yes</ReactBootstrap.Button>
-                      </div>
-                      <div className="col-xs-4 col-xs-offset-1">
-                        <ReactBootstrap.Button bsSize="xsmall" bsStyle="danger" onClick={this.onClickDatapointNo.bind(null, element.pid, element.p, element.l)}>No</ReactBootstrap.Button>
-                      </div>
-                    </div>
-                  </ReactBootstrap.Popover>
-                );
-                return (
-                  <ReactBootstrap.OverlayTrigger key={element.ne} ref={ popover => this.popovers[element.p] = popover} placement="right" trigger="click" overlay={popover} rootClose>
-                    <span className="datapoint" style={{borderBottom:'2px solid '+element.c}}>{element.data}</span>
-                  </ReactBootstrap.OverlayTrigger>
-                );
-            } else if (element.type == 'variable') {
-                var title=<div>This value belongs to <strong>any existing datapoint</strong>?</div>
-                var list = this.state.dpsInfo.map( (dp,i) => {
-                    return (
-                      <ReactBootstrap.ListGroupItem key={i} onClick={this.onClickVariable.bind(null, dp.pid, element.p, element.l)}>
-                        {dp.datapointname.split(this.state.datasourcename)[1]}
-                      </ReactBootstrap.ListGroupItem>
-                    );
-                });
-                var popover=(
-                  <ReactBootstrap.Popover className="variable-feedback-popover" style={{zIndex:1260, wordWrap:"break-word"}} id='dpidentification' title={title}>
-                    <ReactBootstrap.ListGroup fill>
-                      {list}
-                    </ReactBootstrap.ListGroup>
-                  </ReactBootstrap.Popover>
-                );
-                return (
-                  <ReactBootstrap.OverlayTrigger key={element.ne} ref={ popover => this.popovers[element.p] = popover} placement="right" trigger="click" overlay={popover} rootClose>
-                    <span className="variable" style={{borderBottom: '2px solid #eee'}}>{element.data}</span>
-                  </ReactBootstrap.OverlayTrigger>
-                );
-            }
-        });
-        return (
-          <div className="modal-ds-content">
-            {element_nodes}
-          </div>
-        );
+    getHtmlContent () {
+        if (!this.state.dsData || !this.state.dsData.hasOwnProperty('content')) {
+            return [];
+        }
+        if (utils.isJSON(this.state.dsData.content)) {
+            return this.processJSONContent();
+        } else {
+            return this.processTextContent();
+        }
     }
 
-    generateHtmlContent () {
+    processTextContent () {
         var dsData = this.state.dsData;
         var dsVars = dsData.variables;
         var dsDatapoints = this.state.dsDatapoints;
@@ -437,14 +392,14 @@ class WidgetConfigDs extends React.Component {
             match = newLineRegex.exec(dsSubContent);
             while(match != null) {
                 text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
-                elements.push({ne:numElement++,type:'nl'});
+                elements.push(<span key={numElement++}>{text}</span>);
+                elements.push(<br key={numElement++} />);
                 start=match.index+match.length-1;
                 match = newLineRegex.exec(dsSubContent);
             }
             if (start<position) {
                 text=dsSubContent.substr(start,position-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push(<span key={numElement++}>{text}</span>);
             }
             var datapointFound=dsDatapoints.some( dp => {
                 if (dp.index == position) {
@@ -455,13 +410,50 @@ class WidgetConfigDs extends React.Component {
                             datapointname = state_dp.datapointname.split(this.state.datasourcename)[1];
                         }
                     });
-                    elements.push({ne:numElement++,type:'datapoint',pid:dp.pid,p:position,l:length,data:text,datapointname:datapointname,c:dp.c});
+                    var title=<div>Does this value belong to <strong>{datapointname}</strong>?</div>
+                    var popover=(
+                      <ReactBootstrap.Popover style={{zIndex:1260, wordWrap:"break-word"}} id='dpvalidation' title={title}>
+                        <div className="row">
+                          <div className="col-xs-4 col-xs-offset-2">
+                            <ReactBootstrap.Button bsSize="xsmall" bsStyle="success" onClick={this.onClickDatapointYes.bind(null, dp.pid, position, length)}>Yes</ReactBootstrap.Button>
+                          </div>
+                          <div className="col-xs-4 col-xs-offset-1">
+                            <ReactBootstrap.Button bsSize="xsmall" bsStyle="danger" onClick={this.onClickDatapointNo.bind(null, dp.pid, position, length)}>No</ReactBootstrap.Button>
+                          </div>
+                        </div>
+                      </ReactBootstrap.Popover>
+                    );
+                    elements.push(
+                      <ReactBootstrap.OverlayTrigger key={numElement++} ref={ popover => this.popovers[dp.index] = popover} placement="right" trigger="click" overlay={popover} rootClose>
+                        <span className="datapoint" style={{borderBottom:'2px solid '+dp.c}}>{text}</span>
+                      </ReactBootstrap.OverlayTrigger>
+                    );
                     return true;
                 }
             });
             if (datapointFound == false) {
-                text=dsData.content.substr(position,length);
-                elements.push({ne:numElement++, type:'variable',data:text,p:position,l:length});
+                var variable_pos=position;
+                text=dsData.content.substr(variable_pos,length);
+                var title=<div>Does this value belong to <strong>any existing datapoint</strong>?</div>
+                var list = this.state.dpsInfo.map( (dp,i) => {
+                    return (
+                      <ReactBootstrap.ListGroupItem key={i} onClick={this.onClickVariable.bind(null, dp.pid, position, length)}>
+                        {dp.datapointname.split(this.state.datasourcename)[1]}
+                      </ReactBootstrap.ListGroupItem>
+                    );
+                });
+                var popover=(
+                  <ReactBootstrap.Popover className="variable-feedback-popover" style={{zIndex:1260, wordWrap:"break-word"}} id='dpidentification' title={title}>
+                    <ReactBootstrap.ListGroup fill>
+                      {list}
+                    </ReactBootstrap.ListGroup>
+                  </ReactBootstrap.Popover>
+                );
+                elements.push(
+                  <ReactBootstrap.OverlayTrigger key={numElement++} ref={ popover => this.popovers[variable_pos] = popover} placement="right" trigger="click" overlay={popover} rootClose>
+                    <span className="variable" style={{borderBottom: '2px solid #eee'}}>{text}</span>
+                  </ReactBootstrap.OverlayTrigger>
+                );
             } else {
                 datapointFound = false;
             }
@@ -472,16 +464,280 @@ class WidgetConfigDs extends React.Component {
             start=0;
             while((match=newLineRegex.exec(dsSubContent)) != null) {
                 text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
-                elements.push({ne:numElement++,type:'nl'});
+                elements.push(<span key={numElement++}>{text}</span>);
+                elements.push(<br key={numElement++} />);
                 start=match.index+match.length-1;
             }
             if (start<dsSubContent.length-1) {
                 text=dsSubContent.substr(start,dsSubContent.length-1-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push(<span key={numElement++}>{text}</span>);
             }
         }
         return elements;
+    }
+
+    processJSONContent () {
+        var dsData = this.state.dsData;
+        var elements=[];
+        if (!dsData) {
+            return elements;
+        }
+        var dsVars = dsData.variables;
+        var dsDatapoints = this.state.dsDatapoints;
+        var dpsInfo = this.state.dpsInfo;
+        var numElement = 0;
+        var cursorPosition=0;
+        var newContent = ''
+        var dsSubContent, start, text, match, datapointname, position, length;
+        dsVars.forEach( v => {
+            position=v[0];
+            length=v[1];
+            newContent+=dsData.content.substr(cursorPosition,position-cursorPosition);
+            var datapointFound=dsDatapoints.some( dp => {
+                if (dp.index == position) {
+                    text=dsData.content.substr(position,length);
+                    datapointname = '...';
+                    dpsInfo.forEach( state_dp => {
+                        if (state_dp.pid == dp.pid) {
+                            datapointname = state_dp.datapointname.split(this.state.datasourcename)[1];
+                        }
+                    });
+                    if (utils.inJSONString(dsData.content, position)) {
+                        var newEl = "/*_k_type/dp/"+text+"/"+datapointname+"/"+dp.pid+"/"+position+"/"+length+"/"+dp.c+"*/"
+                    } else {
+                        var newEl = JSON.stringify({_k_type:'dp',datapointname:datapointname, pid:dp.pid, text:text, position:position, length:length, c:dp.c});
+                    }
+                    console.log('Nuevo elemento',newEl);
+                    newContent+= newEl;
+                    return true;
+                }
+            });
+            if (datapointFound == false) {
+                text=dsData.content.substr(position,length);
+                var res = utils.inJSONString(dsData.content, position)
+                if (res) {
+                    var newEl = "/*_k_type/var/"+text+"/"+position+"/"+length+"*/"
+                } else {
+                    var newEl = JSON.stringify({_k_type:'var', text:text, position:position, length:length});
+                }
+                console.log('Nuevo elemento',newEl);
+                newContent+= newEl;
+            } else {
+                datapointFound = false;
+            }
+            cursorPosition=position+length;
+        });
+        if (cursorPosition<dsData.content.length) {
+            newContent+=dsData.content.substr(cursorPosition,dsData.content.length-cursorPosition);
+        }
+        // ahora tenemos que crear la tabla con el json
+        var content = JSON.parse(newContent);
+        var json_elements = this.getJSONElements(content);
+        return json_elements;
+    }
+
+    getJSONElements (obj) {
+        var objType = Object.prototype.toString.apply(obj)
+        if (objType == '[object Object]' && obj.hasOwnProperty('_k_type')) {
+            if (obj._k_type == 'var') {
+                var title=<div>Does this value belong to <strong>any existing datapoint</strong>?</div>
+                var list = this.state.dpsInfo.map( (dp,i) => {
+                    return (
+                      <ReactBootstrap.ListGroupItem key={i} onClick={this.onClickVariable.bind(null, dp.pid, parseInt(obj.position), parseInt(obj.length))}>
+                        {dp.datapointname.split(this.state.datasourcename)[1]}
+                      </ReactBootstrap.ListGroupItem>
+                    );
+                });
+                var popover=(
+                  <ReactBootstrap.Popover className="variable-feedback-popover" style={{zIndex:1260, wordWrap:"break-word"}} id='dpidentification' title={title}>
+                    <ReactBootstrap.ListGroup fill>
+                      {list}
+                    </ReactBootstrap.ListGroup>
+                  </ReactBootstrap.Popover>
+                );
+                return (
+                  <ReactBootstrap.OverlayTrigger ref={ popover => this.popovers[parseInt(obj.position)] = popover} placement="right" trigger="click" overlay={popover} rootClose>
+                    <span className="variable" style={{borderBottom: '2px solid #eee'}}>{obj.text}</span>
+                  </ReactBootstrap.OverlayTrigger>
+                );
+            } else if (obj._k_type == 'dp') {
+                var title=<div>Does this value belong to <strong>{obj.datapointname}</strong>?</div>
+                var popover=(
+                  <ReactBootstrap.Popover style={{zIndex:1260, wordWrap:"break-word"}} id='dpvalidation' title={title}>
+                    <div className="row">
+                      <div className="col-xs-4 col-xs-offset-2">
+                        <ReactBootstrap.Button bsSize="xsmall" bsStyle="success" onClick={this.onClickDatapointYes.bind(null, obj.pid, parseInt(obj.position), parseInt(obj.length))}>Yes</ReactBootstrap.Button>
+                      </div>
+                      <div className="col-xs-4 col-xs-offset-1">
+                        <ReactBootstrap.Button bsSize="xsmall" bsStyle="danger" onClick={this.onClickDatapointNo.bind(null, obj.pid, parseInt(obj.position), parseInt(obj.length))}>No</ReactBootstrap.Button>
+                      </div>
+                    </div>
+                  </ReactBootstrap.Popover>
+                );
+                return (
+                  <ReactBootstrap.OverlayTrigger ref={ popover => this.popovers[parseInt(obj.position)] = popover} placement="right" trigger="click" overlay={popover} rootClose>
+                    <span className="datapoint" style={{borderBottom:'2px solid '+obj.c}}>{obj.text}</span>
+                  </ReactBootstrap.OverlayTrigger>
+                );
+            }
+        } else if (objType == '[object Object]') {
+            var keys = Object.keys(obj);
+            var rows = keys.map( (key,i) => {
+                return <tr key={i}><th>{key}</th><td>{this.getJSONElements(obj[key])}</td></tr>;
+            });
+            return (
+              <ReactBootstrap.Table responsive>
+                <tbody>
+                  {rows}
+                </tbody>
+              </ReactBootstrap.Table>
+            );
+        } else if (objType == '[object Array]') {
+            var tabItems = [];
+            var otherItems = [];
+            obj.forEach( item => {
+                var itemType = Object.prototype.toString.apply(item)
+                if (itemType == '[object Object]' && !item.hasOwnProperty('_k_type')) {
+                    tabItems.push(item);
+                } else {
+                    otherItems.push(item);
+                }
+            });
+            if (otherItems.length > 0) {
+                if (tabItems.length > 0) {
+                    otherItems.push(tabItems);
+                }
+                var rows = otherItems.map( (item,i) => {
+                    return <tr key={i}>{this.getJSONElements(item)}</tr>
+                });
+                return (
+                  <ReactBootstrap.Table responsive>
+                    <tbody>
+                      {rows}
+                    </tbody>
+                  </ReactBootstrap.Table>
+                );
+            } else if (tabItems.length > 0) {
+                var keys = []
+                tabItems.forEach( item => {
+                    var itemKeys = Object.keys(item);
+                    itemKeys.forEach( itemKey => {
+                        if (keys.indexOf(itemKey) == -1) {
+                            keys.push(itemKey)
+                        }
+                    });
+                });
+                var theader = keys.map ( (key,i) => {
+                    return <th key={i}>{key}</th>
+                });
+                var rows = tabItems.map ( (item,i) => {
+                    var row = keys.map ( (key,j) => {
+                        return <td key={j}>{this.getJSONElements(item[key])}</td>
+                    });
+                    return <tr key={i}>{row}</tr>
+                });
+                return (
+                  <ReactBootstrap.Table responsive>
+                    <thead>
+                      <tr>
+                        {theader}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows}
+                    </tbody>
+                  </ReactBootstrap.Table>
+                );
+            } else {
+                return <div />;
+            }
+        } else if (objType == '[object String]') {
+            var matches = obj.match(/\/\*_k_type.*?\*\//gm)
+            if (matches) {
+                var result = [];
+                var text = obj;
+                var child = 0;
+                matches.forEach( match => {
+                    var texts = text.split(match,2)
+                    if (texts[0].length > 0) {
+                        result.push(<span key={child++}>{texts[0]}</span>)
+                    }
+                    var params = match.split('/*_k_type')[1].split('*/')[0].split('/')
+                    if (params[1] == "var") {
+                        var position = parseInt(params[3]);
+                        var length = parseInt(params[4]);
+                        var value = params[2];
+                        var title=<div>Does this value belong to <strong>any existing datapoint</strong>?</div>
+                        var list = this.state.dpsInfo.map( (dp,i) => {
+                            return (
+                              <ReactBootstrap.ListGroupItem key={i} onClick={this.onClickVariable.bind(null, dp.pid, position, length)}>
+                                {dp.datapointname.split(this.state.datasourcename)[1]}
+                              </ReactBootstrap.ListGroupItem>
+                            );
+                        });
+                        var popover=(
+                          <ReactBootstrap.Popover className="variable-feedback-popover" style={{zIndex:1260, wordWrap:"break-word"}} id='dpidentification' title={title}>
+                            <ReactBootstrap.ListGroup fill>
+                              {list}
+                            </ReactBootstrap.ListGroup>
+                          </ReactBootstrap.Popover>
+                        );
+                        result.push(
+                          <ReactBootstrap.OverlayTrigger key={child++} ref={ popover => this.popovers[position] = popover} placement="right" trigger="click" overlay={popover} rootClose>
+                            <span className="variable" style={{borderBottom: '2px solid #eee'}}>{params[2]}</span>
+                          </ReactBootstrap.OverlayTrigger>
+                        );
+                    } else if (params[1] == "dp") {
+                        console.log(params);
+                        var position = parseInt(params[5]);
+                        var length = parseInt(params[6]);
+                        var value = params[2];
+                        var datapointname = params[3];
+                        var pid = params[4];
+                        var color = params[7];
+                        var title=<div>Does this value belong to <strong>{datapointname}</strong>?</div>
+                        var popover=(
+                          <ReactBootstrap.Popover style={{zIndex:1260, wordWrap:"break-word"}} id='dpvalidation' title={title}>
+                            <div className="row">
+                              <div className="col-xs-4 col-xs-offset-2">
+                                <ReactBootstrap.Button bsSize="xsmall" bsStyle="success" onClick={this.onClickDatapointYes.bind(null, pid, position, length)}>Yes</ReactBootstrap.Button>
+                              </div>
+                              <div className="col-xs-4 col-xs-offset-1">
+                                <ReactBootstrap.Button bsSize="xsmall" bsStyle="danger" onClick={this.onClickDatapointNo.bind(null, pid, position, length)}>No</ReactBootstrap.Button>
+                              </div>
+                            </div>
+                          </ReactBootstrap.Popover>
+                        );
+                        result.push(
+                          <ReactBootstrap.OverlayTrigger key={child++} ref={ popover => this.popovers[position] = popover} placement="right" trigger="click" overlay={popover} rootClose>
+                            <span className="datapoint" style={{borderBottom:'2px solid '+color}}>{value}</span>
+                          </ReactBootstrap.OverlayTrigger>
+                        );
+                        console.log('asi estan los popovers',this.popovers);
+                    } else {
+                        result.push(<span key={child++}>{match}</span>);
+                    }
+                    text = texts[1];
+                });
+                if (text.length > 0) {
+                    result.push(<span key={child++}>{text}</span>);
+                }
+                return <div>{result}</div>;
+            } else {
+                return <div>{String(obj)}</div>
+            }
+        } else {
+            return <div>{String(obj)}</div>
+        }
+    }
+
+    getFeedbackModalContent () {
+        var element_nodes=this.getHtmlContent();
+        return (
+          <div className="modal-ds-content">
+            {element_nodes}
+          </div>
+        );
     }
 
     showFeedbackModal = () => {
@@ -556,7 +812,9 @@ class WidgetConfigDs extends React.Component {
     }
 
     onClickDatapointYes = (pid, pos, len) => {
+        console.log(this.popovers, pid, pos, len);
         if (this.popovers.hasOwnProperty(pos)) {
+            console.log('cerrando popover');
             this.popovers[pos].hide();
         }
         var dsDatapoints = this.state.dsDatapoints;
@@ -576,7 +834,9 @@ class WidgetConfigDs extends React.Component {
     }
 
     onClickDatapointNo = (pid, pos, len) => {
+        console.log(this.popovers, pid, pos, len);
         if (this.popovers.hasOwnProperty(pos)) {
+            console.log('cerrando popover');
             this.popovers[pos].hide();
         }
         var dsDatapoints = this.state.dsDatapoints.filter( dp => !(dp.pid == pid && dp.index == pos));
@@ -1443,7 +1703,18 @@ class WidgetDs extends React.Component {
         return fontClass;
     }
 
-    generateHtmlContent () {
+    getHtmlContent () {
+        if (!this.state.dsData || !this.state.dsData.hasOwnProperty('content')) {
+            return [];
+        }
+        if (utils.isJSON(this.state.dsData.content)) {
+            return this.processJSONContent();
+        } else {
+            return this.processTextContent();
+        }
+    }
+
+    processTextContent () {
         var dsData = this.state.dsData;
         var dsDatapoints = this.state.datapoints;
         var elements=[];
@@ -1477,14 +1748,14 @@ class WidgetDs extends React.Component {
             match = newLineRegex.exec(dsSubContent);
             while(match != null) {
                 text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
-                elements.push({ne:numElement++,type:'nl'});
+                elements.push(<span key={numElement++}>{text}</span>);
+                elements.push(<br key={numElement++} />);
                 start=match.index+match.length-1;
                 match = newLineRegex.exec(dsSubContent);
             }
             if (start<position) {
                 text=dsSubContent.substr(start,position-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push(<span key={numElement++}>{text}</span>);
             }
             var datapointFound=dsData.datapoints.some( dp => {
                 if (dp.index == position) {
@@ -1503,13 +1774,22 @@ class WidgetDs extends React.Component {
                     } else {
                         datapointname='...';
                     }
-                    elements.push({ne:numElement++,type:'datapoint',pid:dp.pid,p:position,l:length,data:text,datapointname:datapointname});
+                    var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{datapointname}</ReactBootstrap.Tooltip>;
+                    elements.push(
+                      <ReactBootstrap.OverlayTrigger key={numElement++} placement="top" overlay={tooltip}>
+                        <span className="datapoint" draggable="true" onClick={this.onClickDatapoint.bind(null,dp.pid)} onDragStart={this.onDragStartDatapoint.bind(null,dp.pid)}>
+                          {text}
+                        </span>
+                      </ReactBootstrap.OverlayTrigger>
+                    );
                     return true;
                 }
             });
             if (datapointFound == false && can_edit == true) {
                 text=dsData.content.substr(position,length);
-                elements.push({ne:numElement++, type:'variable',data:text,position:position,length:length});
+                elements.push(
+                  <WidgetDsVariable key={numElement++} content={text} position={position} length={length} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />
+                );
             } else {
                 datapointFound = false;
             }
@@ -1520,16 +1800,225 @@ class WidgetDs extends React.Component {
             start=0;
             while((match=newLineRegex.exec(dsSubContent)) != null) {
                 text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
-                elements.push({ne:numElement++,type:'nl'});
+                elements.push(<span key={numElement++}>{text}</span>);
+                elements.push(<br key={numElement++} />);
                 start=match.index+match.length-1;
             }
             if (start<dsSubContent.length-1) {
                 text=dsSubContent.substr(start,dsSubContent.length-1-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push(<span key={numElement++}>{text}</span>);
             }
         }
         return elements;
+    }
+
+    processJSONContent () {
+        var dsData = this.state.dsData;
+        var dsDatapoints = this.state.datapoints;
+        var elements=[];
+        if (!dsData) {
+            return elements;
+        }
+        var can_edit = true;
+        if (this.state.datasourcename.split(':').length > 1) {
+            var dsVars = [];
+            can_edit = false;
+            dsData.datapoints.forEach( dp => {
+                dsData.variables.forEach ( v => {
+                    if (v[0] == dp.index) {
+                        dsVars.push(v);
+                    }
+                });
+            });
+            dsVars.sort( (a,b) => a[0]-b[0]);
+        } else {
+            dsVars = dsData.variables;
+        }
+        var numElement = 0;
+        var cursorPosition=0;
+        var newContent = ''
+        var dsSubContent, start, text, match, datapointname, position, length;
+        dsVars.forEach( v => {
+            position=v[0];
+            length=v[1];
+            newContent+=dsData.content.substr(cursorPosition,position-cursorPosition);
+            var datapointFound=dsData.datapoints.some( dp => {
+                if (dp.index == position) {
+                    text=dsData.content.substr(position,length);
+                    datapointname = null;
+                    dsDatapoints.forEach( state_dp => {
+                        if (state_dp.pid == dp.pid) {
+                            datapointname = state_dp.datapointname.split(this.state.datasourcename);
+                        }
+                    });
+                    if (datapointname) {
+                        datapointname = datapointname[1].slice(-20);
+                        if (datapointname.length == 20) {
+                            datapointname = "..."+datapointname;
+                        }
+                    } else {
+                        datapointname='...';
+                    }
+                    if (utils.inJSONString(dsData.content, position)) {
+                        var newEl = "/*_k_type/dp/"+text+"/"+datapointname+"/"+dp.pid+"*/"
+                    } else {
+                        var newEl = JSON.stringify({_k_type:'dp',datapointname:datapointname, pid:dp.pid, text:text});
+                    }
+                    newContent+= newEl;
+                    return true;
+                }
+            });
+            if (datapointFound == false) {
+                text=dsData.content.substr(position,length);
+                if (can_edit) {
+                    var res = utils.inJSONString(dsData.content, position)
+                    if (res) {
+                        var newEl = "/*_k_type/var/"+text+"/"+position+"/"+length+"*/"
+                    } else {
+                        var newEl = JSON.stringify({_k_type:'var', text:text, position:position, length:length});
+                    }
+                    newContent+= newEl;
+                } else {
+                    newContent+= text;
+                }
+            } else {
+                datapointFound = false;
+            }
+            cursorPosition=position+length;
+        });
+        if (cursorPosition<dsData.content.length) {
+            newContent+=dsData.content.substr(cursorPosition,dsData.content.length-cursorPosition);
+        }
+        // ahora tenemos que crear la tabla con el json
+        var content = JSON.parse(newContent);
+        var json_elements = this.getJSONElements(content);
+        return json_elements;
+    }
+
+    getJSONElements (obj) {
+        var objType = Object.prototype.toString.apply(obj)
+        if (objType == '[object Object]' && obj.hasOwnProperty('_k_type')) {
+            if (obj._k_type == 'var') {
+                return <WidgetDsVariable content={obj.text} position={parseInt(obj.position)} length={parseInt(obj.length)} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />
+            } else if (obj._k_type == 'dp') {
+                var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{obj.datapointname}</ReactBootstrap.Tooltip>;
+                return (
+                  <ReactBootstrap.OverlayTrigger placement="top" overlay={tooltip}>
+                    <span className="datapoint" draggable="true" onClick={this.onClickDatapoint.bind(null,obj.pid)} onDragStart={this.onDragStartDatapoint.bind(null,obj.pid)}>
+                      {obj.text}
+                    </span>
+                  </ReactBootstrap.OverlayTrigger>
+                );
+            }
+        } else if (objType == '[object Object]') {
+            var keys = Object.keys(obj);
+            var rows = keys.map( (key,i) => {
+                return <tr key={i}><th>{key}</th><td>{this.getJSONElements(obj[key])}</td></tr>;
+            });
+            return (
+              <ReactBootstrap.Table responsive>
+                <tbody>
+                  {rows}
+                </tbody>
+              </ReactBootstrap.Table>
+            );
+        } else if (objType == '[object Array]') {
+            var tabItems = [];
+            var otherItems = [];
+            obj.forEach( item => {
+                var itemType = Object.prototype.toString.apply(item)
+                if (itemType == '[object Object]' && !item.hasOwnProperty('_k_type')) {
+                    tabItems.push(item);
+                } else {
+                    otherItems.push(item);
+                }
+            });
+            if (otherItems.length > 0) {
+                if (tabItems.length > 0) {
+                    otherItems.push(tabItems);
+                }
+                var rows = otherItems.map( (item,i) => {
+                    return <tr key={i}>{this.getJSONElements(item)}</tr>
+                });
+                return (
+                  <ReactBootstrap.Table responsive>
+                    <tbody>
+                      {rows}
+                    </tbody>
+                  </ReactBootstrap.Table>
+                );
+            } else if (tabItems.length > 0) {
+                var keys = []
+                tabItems.forEach( item => {
+                    var itemKeys = Object.keys(item);
+                    itemKeys.forEach( itemKey => {
+                        if (keys.indexOf(itemKey) == -1) {
+                            keys.push(itemKey)
+                        }
+                    });
+                });
+                var theader = keys.map ( (key,i) => {
+                    return <th key={i}>{key}</th>
+                });
+                var rows = tabItems.map ( (item,i) => {
+                    var row = keys.map ( (key,j) => {
+                        return <td key={j}>{this.getJSONElements(item[key])}</td>
+                    });
+                    return <tr key={i}>{row}</tr>
+                });
+                return (
+                  <ReactBootstrap.Table responsive>
+                    <thead>
+                      <tr>
+                        {theader}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows}
+                    </tbody>
+                  </ReactBootstrap.Table>
+                );
+            } else {
+                return <div />;
+            }
+        } else if (objType == '[object String]') {
+            var matches = obj.match(/\/\*_k_type.*?\*\//gm)
+            if (matches) {
+                var result = [];
+                var text = obj;
+                var child = 0;
+                matches.forEach( match => {
+                    var texts = text.split(match,2)
+                    if (texts[0].length > 0) {
+                        result.push(<span key={child++}>{texts[0]}</span>)
+                    }
+                    var params = match.split('/*_k_type')[1].split('*/')[0].split('/')
+                    if (params[1] == "var") {
+                        result.push(<WidgetDsVariable key={child++} content={params[2]} position={parseInt(params[3])} length={parseInt(params[4])} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />);
+                    } else if (params[1] == "dp") {
+                        var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{params[3]}</ReactBootstrap.Tooltip>;
+                        result.push(
+                            <ReactBootstrap.OverlayTrigger key={child++} placement="top" overlay={tooltip}>
+                              <span className="datapoint" draggable="true" onClick={this.onClickDatapoint.bind(null,params[4])} onDragStart={this.onDragStartDatapoint.bind(null,params[4])}>
+                                {params[2]}
+                              </span>
+                            </ReactBootstrap.OverlayTrigger>
+                        );
+                    } else {
+                        result.push(<span key={child++}>{match}</span>);
+                    }
+                    text = texts[1];
+                });
+                if (text.length > 0) {
+                    result.push(<span key={child++}>{text}</span>);
+                }
+                return <div>{result}</div>;
+            } else {
+                return <div>{String(obj)}</div>
+            }
+        } else {
+            return <div>{String(obj)}</div>
+        }
     }
 
     cancelSnapshot = () => {
@@ -1567,28 +2056,8 @@ class WidgetDs extends React.Component {
               </div>
             );
         }
-        var elements=this.generateHtmlContent();
+        var element_nodes=this.getHtmlContent();
         var textClass=this.getFontClass();
-        var element_nodes=elements.map( element => {
-            if (element.type == 'text') {
-                return <span key={element.ne}>{element.data}</span>;
-            } else if (element.type == 'nl') {
-                return <br key={element.ne} />;
-            } else if (element.type == 'datapoint') {
-                var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{element.datapointname}</ReactBootstrap.Tooltip>;
-                return (
-                  <ReactBootstrap.OverlayTrigger key={element.ne} placement="top" overlay={tooltip}>
-                    <span key={element.ne} className="datapoint" draggable="true" onClick={this.onClickDatapoint.bind(null,element.pid)} onDragStart={this.onDragStartDatapoint.bind(null,element.pid)}>
-                      {element.data}
-                    </span>
-                  </ReactBootstrap.OverlayTrigger>
-                );
-            } else if (element.type == 'variable') {
-                return (
-                  <WidgetDsVariable key={element.ne} content={element.data} position={element.position} length={element.length} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />
-                );
-            }
-        });
         var info_node=this.getDsInfo();
         var share_modal=(
           <ReactBootstrap.Modal show={this.state.shareModal} onHide={this.cancelSnapshot}>

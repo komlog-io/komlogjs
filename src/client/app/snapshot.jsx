@@ -262,7 +262,18 @@ class SnapshotDs extends React.Component {
         }
     }
 
-    generateHtmlContent () {
+    getHtmlContent () {
+        if (!this.state.dsData || !this.state.dsData.hasOwnProperty('content')) {
+            return [];
+        }
+        if (utils.isJSON(this.state.dsData.content)) {
+            return this.processJSONContent();
+        } else {
+            return this.processTextContent();
+        }
+    }
+
+    processTextContent () {
         var dsData = this.state.dsData;
         var elements=[];
         if (!dsData) {
@@ -279,14 +290,14 @@ class SnapshotDs extends React.Component {
             var match = newLineRegex.exec(dsSubContent);
             while(match != null) {
                 var text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
-                elements.push({ne:numElement++,type:'nl'});
+                elements.push(<span key={numElement++}>{text}</span>);
+                elements.push(<br key={numElement++} />);
                 start=match.index+match.length-1;
                 match = newLineRegex.exec(dsSubContent);
             }
             if (start<position) {
                 text=dsSubContent.substr(start,position-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push(<span key={numElement++}>{text}</span>);
             }
             var datapointFound=false;
             for (var j=0;j<dsData.datapoints.length;j++) {
@@ -307,13 +318,20 @@ class SnapshotDs extends React.Component {
                             break;
                         }
                     }
-                    elements.push({ne:numElement++,type:'datapoint',pid:dsData.datapoints[j].pid,p:position,l:length,style:{color:color, fontWeight:'bold'},data:text,datapointname:datapointname});
+                    var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{datapointname}</ReactBootstrap.Tooltip>;
+                    elements.push(
+                      <ReactBootstrap.OverlayTrigger key={numElement++} placement="top" overlay={tooltip}>
+                        <span style={{color:color, fontWeight:'bold'}}>
+                          {text}
+                        </span>
+                      </ReactBootstrap.OverlayTrigger>
+                    );
                     break;
                 }
             }
             if (datapointFound == false) {
                 text=dsData.content.substr(position,length);
-                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push(<span key={numElement++}>{text}</span>);
             } else {
                 datapointFound = false;
             }
@@ -324,16 +342,194 @@ class SnapshotDs extends React.Component {
             start=0;
             while((match=newLineRegex.exec(dsSubContent)) != null) {
                 text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
-                elements.push({ne:numElement++,type:'nl'});
+                elements.push(<span key={numElement++}>{text}</span>);
+                elements.push(<br key={numElement++} />);
                 start=match.index+match.length-1;
             }
             if (start<dsSubContent.length-1) {
                 text=dsSubContent.substr(start,dsSubContent.length-1-start).replace(/ /g, '\u00a0');
-                elements.push({ne:numElement++,type:'text',data:text});
+                elements.push(<span key={numElement++}>{text}</span>);
             }
         }
         return elements;
+    }
+
+    processJSONContent () {
+        var dsData = this.state.dsData;
+        var elements=[];
+        if (!dsData) {
+            return elements;
+        }
+        var dsDatapoints = this.props.datapoints;
+        var dsVars = dsData.variables
+        var numElement = 0;
+        var cursorPosition=0;
+        var newContent = ''
+        var dsSubContent, start, text, match, datapointname, color, position, length;
+        dsVars.forEach( v => {
+            position=v[0];
+            length=v[1];
+            newContent+=dsData.content.substr(cursorPosition,position-cursorPosition);
+            var datapointFound=dsData.datapoints.some( dp => {
+                if (dp.index == position) {
+                    text=dsData.content.substr(position,length);
+                    datapointname = '...';
+                    color = 'black';
+                    dsDatapoints.forEach( state_dp => {
+                        if (state_dp.pid == dp.pid) {
+                            datapointname = state_dp.datapointname.split(this.props.datasource.datasourcename)[1];
+                            color = state_dp.color;
+                        }
+                    });
+                    if (datapointname.length > 20) {
+                        datapointname = '...'+datapointname.slice(-20);
+                    }
+                    if (utils.inJSONString(dsData.content, position)) {
+                        var newEl = "/*_k_type/dp/"+text+"/"+datapointname+"/"+dp.pid+"/"+color+"*/"
+                    } else {
+                        var newEl = JSON.stringify({_k_type:'dp',datapointname:datapointname, pid:dp.pid, text:text, color:color});
+                    }
+                    newContent+= newEl;
+                    return true;
+                }
+            });
+            if (datapointFound == false) {
+                text=dsData.content.substr(position,length);
+                newContent+= text;
+            } else {
+                datapointFound = false;
+            }
+            cursorPosition=position+length;
+        });
+        if (cursorPosition<dsData.content.length) {
+            newContent+=dsData.content.substr(cursorPosition,dsData.content.length-cursorPosition);
+        }
+        // ahora tenemos que crear la tabla con el json
+        var content = JSON.parse(newContent);
+        var json_elements = this.getJSONElements(content);
+        return json_elements;
+    }
+
+    getJSONElements (obj) {
+        var objType = Object.prototype.toString.apply(obj)
+        if (objType == '[object Object]' && obj.hasOwnProperty('_k_type')) {
+            if (obj._k_type == 'dp') {
+                var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{obj.datapointname}</ReactBootstrap.Tooltip>;
+                return(
+                  <ReactBootstrap.OverlayTrigger placement="top" overlay={tooltip}>
+                    <span style={{color:obj.color, fontWeight:'bold'}}>
+                      {obj.text}
+                    </span>
+                  </ReactBootstrap.OverlayTrigger>
+                );
+            }
+        } else if (objType == '[object Object]') {
+            var keys = Object.keys(obj);
+            var rows = keys.map( (key,i) => {
+                return <tr key={i}><th>{key}</th><td>{this.getJSONElements(obj[key])}</td></tr>;
+            });
+            return (
+              <ReactBootstrap.Table responsive>
+                <tbody>
+                  {rows}
+                </tbody>
+              </ReactBootstrap.Table>
+            );
+        } else if (objType == '[object Array]') {
+            var tabItems = [];
+            var otherItems = [];
+            obj.forEach( item => {
+                var itemType = Object.prototype.toString.apply(item)
+                if (itemType == '[object Object]' && !item.hasOwnProperty('_k_type')) {
+                    tabItems.push(item);
+                } else {
+                    otherItems.push(item);
+                }
+            });
+            if (otherItems.length > 0) {
+                if (tabItems.length > 0) {
+                    otherItems.push(tabItems);
+                }
+                var rows = otherItems.map( (item,i) => {
+                    return <tr key={i}>{this.getJSONElements(item)}</tr>
+                });
+                return (
+                  <ReactBootstrap.Table responsive>
+                    <tbody>
+                      {rows}
+                    </tbody>
+                  </ReactBootstrap.Table>
+                );
+            } else if (tabItems.length > 0) {
+                var keys = []
+                tabItems.forEach( item => {
+                    var itemKeys = Object.keys(item);
+                    itemKeys.forEach( itemKey => {
+                        if (keys.indexOf(itemKey) == -1) {
+                            keys.push(itemKey)
+                        }
+                    });
+                });
+                var theader = keys.map ( (key,i) => {
+                    return <th key={i}>{key}</th>
+                });
+                var rows = tabItems.map ( (item,i) => {
+                    var row = keys.map ( (key,j) => {
+                        return <td key={j}>{this.getJSONElements(item[key])}</td>
+                    });
+                    return <tr key={i}>{row}</tr>
+                });
+                return (
+                  <ReactBootstrap.Table responsive>
+                    <thead>
+                      <tr>
+                        {theader}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows}
+                    </tbody>
+                  </ReactBootstrap.Table>
+                );
+            } else {
+                return <div />;
+            }
+        } else if (objType == '[object String]') {
+            var matches = obj.match(/\/\*_k_type.*?\*\//gm)
+            if (matches) {
+                var result = [];
+                var text = obj;
+                var child = 0;
+                matches.forEach( match => {
+                    var texts = text.split(match,2)
+                    if (texts[0].length > 0) {
+                        result.push(<span key={child++}>{texts[0]}</span>)
+                    }
+                    var params = match.split('/*_k_type')[1].split('*/')[0].split('/')
+                    if (params[1] == "dp") {
+                        var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{params[3]}</ReactBootstrap.Tooltip>;
+                        result.push(
+                          <ReactBootstrap.OverlayTrigger key={child++} placement="top" overlay={tooltip}>
+                            <span style={{color:params[5], fontWeight:'bold'}}>
+                              {params[2]}
+                            </span>
+                          </ReactBootstrap.OverlayTrigger>
+                        );
+                    } else {
+                        result.push(<span key={child++}>{match}</span>);
+                    }
+                    text = texts[1];
+                });
+                if (text.length > 0) {
+                    result.push(<span key={child++}>{text}</span>);
+                }
+                return <div>{result}</div>;
+            } else {
+                return <div>{String(obj)}</div>
+            }
+        } else {
+            return <div>{String(obj)}</div>
+        }
     }
 
     render () {
@@ -344,31 +540,7 @@ class SnapshotDs extends React.Component {
               </div>
             );
         }
-        var elements=this.generateHtmlContent();
-        var element_nodes=elements.map ( element => {
-            if (element.type == 'text') {
-                return (
-                  <span key={element.ne}>
-                    {element.data}
-                  </span>
-                );
-            }else if (element.type == 'nl') {
-                return < br key={element.ne} />
-            }else if (element.type == 'datapoint') {
-                var tooltip=(
-                  <ReactBootstrap.Tooltip id='datapoint'>
-                    {element.datapointname}
-                  </ReactBootstrap.Tooltip>
-                );
-                return (
-                  <ReactBootstrap.OverlayTrigger key={element.ne} placement="top" overlay={tooltip}>
-                    <span key={element.ne} style={element.style}>
-                      {element.data}
-                    </span>
-                  </ReactBootstrap.OverlayTrigger>
-                );
-            }
-        });
+        var element_nodes =this.getHtmlContent();
         var info_node=this.getDsInfo();
         return (
           <div>
