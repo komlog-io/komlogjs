@@ -1788,7 +1788,7 @@ class WidgetDs extends React.Component {
             if (datapointFound == false && can_edit == true) {
                 text=dsData.content.substr(position,length);
                 elements.push(
-                  <WidgetDsVariable key={numElement++} content={text} position={position} length={length} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />
+                  <WidgetDsVariable key={numElement++} content={text} position={position} length={length} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} />
                 );
             } else {
                 datapointFound = false;
@@ -1899,7 +1899,7 @@ class WidgetDs extends React.Component {
         var objType = Object.prototype.toString.apply(obj)
         if (objType == '[object Object]' && obj.hasOwnProperty('_k_type')) {
             if (obj._k_type == 'var') {
-                return <WidgetDsVariable content={obj.text} position={parseInt(obj.position)} length={parseInt(obj.length)} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />
+                return <WidgetDsVariable content={obj.text} position={parseInt(obj.position)} length={parseInt(obj.length)} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints}/>
             } else if (obj._k_type == 'dp') {
                 var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{obj.datapointname}</ReactBootstrap.Tooltip>;
                 return (
@@ -1994,7 +1994,7 @@ class WidgetDs extends React.Component {
                     }
                     var params = match.split('/*_k_type')[1].split('*/')[0].split('/')
                     if (params[1] == "var") {
-                        result.push(<WidgetDsVariable key={child++} content={params[2]} position={parseInt(params[3])} length={parseInt(params[4])} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} associateExistingDatapointCallback={this.associateExistingDatapoint} />);
+                        result.push(<WidgetDsVariable key={child++} content={params[2]} position={parseInt(params[3])} length={parseInt(params[4])} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints}/>);
                     } else if (params[1] == "dp") {
                         var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{params[3]}</ReactBootstrap.Tooltip>;
                         result.push(
@@ -2041,11 +2041,6 @@ class WidgetDs extends React.Component {
             datapointname:datapointname
         };
         PubSub.publish(topics.MONITOR_DATAPOINT,payload);
-    }
-
-    associateExistingDatapoint = (position, length, pid) => {
-        var payload = {p:position,l:length,seq:this.state.seq,pid:pid};
-        PubSub.publish(topics.MARK_POSITIVE_VAR,payload);
     }
 
     render () {
@@ -3124,11 +3119,6 @@ class WidgetDsVariable extends React.Component {
         datapoints: this.props.datapoints,
     };
 
-    associateExistingDatapoint = (pid) => {
-        this.popover.hide();
-        this.props.associateExistingDatapointCallback(this.props.position, this.props.length, pid);
-    }
-
     identifyVariable = () => {
         var datapointname=this.datapointname.value;
         if (datapointname.length>1){
@@ -3138,20 +3128,6 @@ class WidgetDsVariable extends React.Component {
     }
 
     render () {
-        var already_monitored=this.state.datapoints.map ( (element, index) => {
-            return <ReactBootstrap.MenuItem key={index} eventKey={element.pid}>{element.datapointname}</ReactBootstrap.MenuItem>;
-        });
-        if (already_monitored.length>0) {
-            var dropdown=(
-              <ReactBootstrap.Nav onSelect={this.associateExistingDatapoint}>
-                <ReactBootstrap.NavDropdown title="Already existing datapoint" id="nav-dropdown">
-                  {already_monitored}
-                </ReactBootstrap.NavDropdown>
-              </ReactBootstrap.Nav>
-            );
-        } else {
-            var dropdown=null;
-        }
         var popover = (
           <ReactBootstrap.Popover id="datapoint" title="Identify Datapoint">
             <ReactBootstrap.FormGroup>
@@ -3162,7 +3138,6 @@ class WidgetDsVariable extends React.Component {
                 </ReactBootstrap.InputGroup.Button>
               </ReactBootstrap.InputGroup>
             </ReactBootstrap.FormGroup>
-            {dropdown}
           </ReactBootstrap.Popover>
         );
         return (
