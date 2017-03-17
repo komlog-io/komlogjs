@@ -112,13 +112,13 @@ class Snapshot extends React.Component {
         var snapshot_content=this.getSnapshotContentEl();
         if (Object.keys(this.state.conf).length == 0) {
             var snapshot=(
-              <div>
+              <div className="snapshot">
                 <SnapshotBar conf={this.state.conf} closeCallback={this.closeCallback} />
               </div>
             );
         } else {
             var snapshot=(
-              <div>
+              <div className="snapshot">
                 <SnapshotBar conf={this.state.conf} shareCallback={this.shareCallback} closeCallback={this.closeCallback} downloadCallback={this.downloadCallback} />
                 {snapshot_content}
               </div>

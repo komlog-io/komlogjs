@@ -16,6 +16,7 @@ class Widget extends React.Component {
         conf:{},
         shareCounter: 0,
         downloadCounter: 0,
+        anomalyState: false,
         showConfig: false,
     };
 
@@ -50,6 +51,8 @@ class Widget extends React.Component {
 
     shouldComponentUpdate (nextProps, nextState) {
         if (this.state.conf != nextState.conf) {
+            return true;
+        } else if (this.state.anomalyState != nextState.anomalyState) {
             return true;
         } else if (this.state.showConfig != nextState.showConfig) {
             return true;
@@ -90,6 +93,14 @@ class Widget extends React.Component {
         this.setState({downloadCounter:this.state.downloadCounter+1});
     }
 
+    setAnomalyState = (state) => {
+        console.log('estado recibido',state);
+        if (state != this.state.anomalyState) {
+            console.log('estableciendo estado',state);
+            this.setState({anomalyState:state});
+        }
+    }
+
     barMessage (data) {
         PubSub.publish(topics.BAR_MESSAGE(),{message:data.message,messageTime:data.messageTime});
     }
@@ -110,7 +121,7 @@ class Widget extends React.Component {
         } else {
             switch (this.state.conf.type) {
                 case 'ds':
-                    return <WidgetDs wid={this.props.wid} shareCounter={this.state.shareCounter} downloadCounter={this.state.downloadCounter} />
+                    return <WidgetDs wid={this.props.wid} shareCounter={this.state.shareCounter} downloadCounter={this.state.downloadCounter} anomalyStateCallback={this.setAnomalyState} />
                 case 'dp':
                     return <WidgetDp wid={this.props.wid} shareCounter={this.state.shareCounter} downloadCounter={this.state.downloadCounter} barMessageCallback={this.barMessage} />
                 case 'mp':
@@ -141,15 +152,16 @@ class Widget extends React.Component {
     render () {
         var widget_content=this.getWidgetContentEl();
         var widget_config=this.getWidgetConfigEl();
+        var widgetClass = this.state.anomalyState ? "widget widget-anomaly" : "widget";
         if (Object.keys(this.state.conf).length === 0) {
             var widget=(
-              <div>
+              <div className={widgetClass}>
                 <WidgetBar bid={this.props.bid} wid={this.props.wid} conf={this.state.conf} closeCallback={this.closeCallback} />
               </div>
             );
         } else {
             var widget=(
-              <div>
+              <div className={widgetClass}>
                 <WidgetBar bid={this.props.bid} wid={this.props.wid} conf={this.state.conf} shareCallback={this.shareCallback} closeCallback={this.closeCallback} configCallback={this.configCallback} isPinned={this.props.isPinned} configOpen={this.state.showConfig} downloadCallback={this.downloadCallback} />
                 {widget_config}
                 {widget_content}
@@ -1539,6 +1551,25 @@ class WidgetDs extends React.Component {
                 newState.loading = false;
                 this.setState(newState);
             });
+
+            var anomUri = values[0].datasourcename+'._k.anomaly';
+            var anomDp = getNodeInfoByUri(anomUri);
+            anomDp.then( (val) => {
+                if (val && val.hasOwnProperty('id') && val.hasOwnProperty('type') && val.type == 'p') {
+                    var topic = topics.DATAPOINT_DATA_UPDATE(val.id);
+                    this.subscriptionTokens.push({
+                        token:PubSub.subscribe(topic,this.subscriptionHandler),
+                        msg:topic
+                    });
+
+                    getDatapointData({pid:val.id, onlyMissing:true});
+
+                    this.setState({anomPid:val.id});
+                } else {
+                    console.log('No anomaly signal');
+                }
+            })
+            .catch( () => {console.log('failed looking up anomaly signal',anomUri)});
         });
     }
 
@@ -1577,6 +1608,9 @@ class WidgetDs extends React.Component {
             case topics.DATASOURCE_DATA_UPDATE():
                 this.refreshData();
                 break;
+            case topics.DATAPOINT_DATA_UPDATE():
+                this.refreshDpData();
+                break;
             case topics.DATAPOINT_CONFIG_UPDATE():
                 this.refreshData();
                 break;
@@ -1606,7 +1640,24 @@ class WidgetDs extends React.Component {
             }
         }
         if (shouldUpdate) {
+            this.refreshDpData();
             this.setState({dsData:dsData, timestamp:dsData.ts,seq:dsData.seq});
+        }
+    }
+
+    async refreshDpData () {
+        if (this.state.anomPid) {
+            console.log('dpdata update recibido');
+            var now = new Date().getTime()/1000;
+            var interval = {its:null, ets:now}
+            var anomData = await getDatapointData({pid:this.state.anomPid, interval:interval, onlyMissing:true});
+            console.log('datos obtenidos',anomData)
+            if (anomData && anomData.hasOwnProperty('data') && anomData.data.length>0) {
+                console.log('vamos a actualizar estado',anomData.data[anomData.data.length-1].value);
+                this.props.anomalyStateCallback(anomData.data[anomData.data.length-1].value>0);
+            } else {
+                console.log('no tenemos datos del dp');
+            }
         }
     }
 
@@ -2053,6 +2104,7 @@ class WidgetDs extends React.Component {
         }
         var element_nodes=this.getHtmlContent();
         var textClass=this.getFontClass();
+        var dsClass = this.state.anomaly ? "ds-content ds-anomaly "+textClass : "ds-content "+textClass;
         var info_node=this.getDsInfo();
         var share_modal=(
           <ReactBootstrap.Modal show={this.state.shareModal} onHide={this.cancelSnapshot}>
@@ -2073,7 +2125,7 @@ class WidgetDs extends React.Component {
         return (
           <div>
             {info_node}
-            <div className={'ds-content '+textClass}>
+            <div className={dsClass}>
               {element_nodes}
             </div>
             <div>

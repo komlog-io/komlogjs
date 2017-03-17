@@ -358,6 +358,7 @@ class DatapointStore {
                 }
             });
         }
+        console.log('datos',pid,its,ets,data);
         if (!its || !ets) {
             data.sort( (a,b) => a.ts - b.ts);
             return data.slice(Math.max(data.length - 200, 0));
