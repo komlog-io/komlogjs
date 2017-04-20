@@ -15,6 +15,7 @@ var config = {
       'terms': APP_DIR + '/terms.jsx',
       'privacy': APP_DIR + '/privacy.jsx',
       'cookies': APP_DIR + '/cookies.jsx',
+      'pricing': APP_DIR + '/pricing.jsx',
       'p_base': APP_DIR + '/p_base.js',
       'home': ['babel-polyfill',APP_DIR + '/index.jsx'],
       'config': ['babel-polyfill', APP_DIR + '/config.jsx']

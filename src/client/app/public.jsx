@@ -15,8 +15,9 @@ class Header extends React.Component {
             </Navbar.Header>
             <Navbar.Collapse>
               <Nav pullRight>
-                <NavItem href="/login">Sign in</NavItem>
-                <NavItem href="/signup">Create account</NavItem>
+                <NavItem href="/pricing"><strong>Pricing</strong></NavItem>
+                <NavItem href="/login"><strong>Sign in</strong></NavItem>
+                <NavItem href="/signup"><strong>Create account</strong></NavItem>
               </Nav>
             </Navbar.Collapse>
           </Navbar>
@@ -87,7 +88,7 @@ class Footer extends React.Component {
                   </ul>
                 </div>
                 <div className="col-lg-2  col-md-2 col-sm-4 col-xs-6">
-                  <div className="title">DEVELOPERS</div>
+                  <div className="title">SUPPORT</div>
                   <ul className="list">
                     <li>
                       <a href="https://github.com/komlog-io">Github</a>

@@ -52,6 +52,17 @@ body {
   background-color: #05beb2;
 }
 
+.btn-contact {
+  color: #02aeee;
+  font-weight: 700;
+  background-color: white;
+  border-color: #02aeee;
+}
+
+.btn-contact:hover, .btn-contact:focus, .btn-contact:active {
+  color: white;
+  background-color: #02aeee;
+}
 .brand {
   height: 50px;
   width: 120px;
@@ -90,6 +101,16 @@ body {
   font-size: 6vw;
   text-align: center;
   color: #73fce7;
+}
+
+.pricing-heading {
+  font-family: 'Raleway', sans-serif;
+  font-size: 44px;
+  color: #011c39;
+}
+
+.pricing-table {
+  margin-top: 30px;
 }
 
 .separator {
