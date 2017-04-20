@@ -63,10 +63,19 @@ body {
   color: white;
   background-color: #02aeee;
 }
+
 .brand {
   height: 50px;
   width: 120px;
   background-image: url('../img/brand.png');
+  background-size: 100px auto;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.login-brand {
+  height: 50px;
+  background-image: url('../img/brand-black.png');
   background-size: 100px auto;
   background-position: center;
   background-repeat: no-repeat;

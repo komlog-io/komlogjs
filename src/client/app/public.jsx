@@ -16,8 +16,8 @@ class Header extends React.Component {
             <Navbar.Collapse>
               <Nav pullRight>
                 <NavItem href="/pricing"><strong>Pricing</strong></NavItem>
-                <NavItem href="/login"><strong>Sign in</strong></NavItem>
-                <NavItem href="/signup"><strong>Create account</strong></NavItem>
+                <NavItem href="/login"><strong>Login</strong></NavItem>
+                <NavItem href="/signup"><strong>Sign up</strong></NavItem>
               </Nav>
             </Navbar.Collapse>
           </Navbar>
@@ -425,13 +425,13 @@ class SignIn extends React.Component {
           <div className="container" style={{paddingBottom:'20px'}}>
             <div className="well well-signin">
               <form className="form-signin" method="post" action="">
-                <h2 className="form-signin-heading text-center">Sign in</h2>
+                <div className="login-brand" />
                 <label htmlFor="username" className="sr-only">Username</label>
                 <input type="text" id="username" name="u" className="form-control" placeholder="Username" required autoFocus />
                 <label htmlFor="password" className="sr-only">Password</label>
                 <input type="password" id="password" name="p" className="form-control" placeholder="Password" required />
                 {banner}
-                <button className="btn btn-lg btn-primary btn-block" type="submit">Sign in</button>
+                <button className="btn btn-lg btn-primary btn-block" type="submit">LOGIN</button>
               </form>
               <h6 className="text-right">
                   <a href="/forget">Forgot your password?</a>
