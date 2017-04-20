@@ -149,7 +149,7 @@ class Root extends React.Component {
             </div>
             <div className="description">
               <div className="container">
-                Komlog is a flexible and powerful event-based platform, aimed at <strong>time series visualization and analysis</strong>. It helps you structure your time series and create <strong>real-time applications</strong> based on them, making it a useful platform for any <strong>data driven organization</strong> or <strong>data scientist</strong>.
+                Komlog is a flexible and powerful platform, aimed at <strong>time series visualization and analysis</strong>. It helps you identify and organize your time series and create <strong>real-time, lambda-based applications</strong> with them, making it a valuable tool for any <strong>data driven organization</strong>.
               </div>
             </div>
             <div className="separator" />
