@@ -15,6 +15,7 @@ class Header extends React.Component {
             </Navbar.Header>
             <Navbar.Collapse>
               <Nav pullRight>
+                <NavItem href="https://medium.com/komlog"><strong>Blog</strong></NavItem>
                 <NavItem href="/pricing"><strong>Pricing</strong></NavItem>
                 <NavItem href="/login"><strong>Login</strong></NavItem>
                 <NavItem href="/signup"><strong>Sign up</strong></NavItem>
