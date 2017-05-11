@@ -13,7 +13,7 @@ class Pricing extends React.Component {
               <span>{' '}Upgrade if you need it.</span><br />
             </div>
             <div className="pricing-table">
-              <div className="col-sm-3 col-md-offset-1">
+              <div className="col-sm-3">
                 <div>
                   <div style={{color:'#011c39',fontFamily:"'Raleway',sans-serif",fontWeight:'700',fontSize:'40px',height:'120px',marginBottom:'15px',textAlign:'center'}}>
                     Free<br/>
@@ -73,6 +73,27 @@ class Pricing extends React.Component {
                       </tr>
                       <tr>
                         <td>Custom data retention</td>
+                      </tr>
+                      <tr>
+                        <td>SLA and enterprise support</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div className="col-sm-3">
+                <div>
+                  <div style={{color:'#011c39',fontFamily:"'Raleway',sans-serif",fontWeight:'700',fontSize:'40px',height:'120px',marginBottom:'15px',textAlign:'center'}}>
+                    On Premise<br/>
+                    <a href="mailto:hello@komlog.io" className="btn btn-contact">CONTACT US</a>
+                  </div>
+                  <table className="table plan-content">
+                    <tbody>
+                      <tr>
+                        <td>On your infrastructure</td>
+                      </tr>
+                      <tr>
+                        <td>Development consulting</td>
                       </tr>
                       <tr>
                         <td>SLA and enterprise support</td>
