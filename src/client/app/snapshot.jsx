@@ -4,7 +4,7 @@ import * as ReactBootstrap from 'react-bootstrap';
 import * as d3 from 'd3';
 import * as utils from './utils.js';
 import {getSnapshotConfig} from './snapshot-store.js';
-import {getDatasourceConfig, getDatasourceData, getDatasourceSnapshotData} from './datasource-store.js';
+import {getDatasourceConfig, getDatasourceData} from './datasource-store.js';
 import {getDataSummary, getDatapointData} from './datapoint-store.js';
 import {TimeSlider, ContentLinegraph, ContentHistogram} from './widget.jsx';
 import {topics, styles} from './types.js';

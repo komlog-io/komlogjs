@@ -14,18 +14,16 @@ class DatasourceStore {
         this._datasourceData = {};
         this._snapshotData = {};
 
-        this._registeredRequests = [];
         this.subscriptionTokens = [];
+        this._registeredRequests = [];
 
         this._lastConfigUpdate = {};
-        this._lastDataUpdate = {};
-        this._lastSnapshotDataUpdate = {};
+        this._intervalsRequested = {};
 
         var subscribedTopics = [
             topics.DATASOURCE_DATA_REQUEST,
             topics.DATASOURCE_CONFIG_REQUEST,
             topics.LOAD_DATASOURCE_SLIDE,
-            topics.SNAPSHOT_DS_DATA_REQUEST,
             topics.DELETE_DATASOURCE
         ];
 
@@ -49,9 +47,6 @@ class DatasourceStore {
             case topics.LOAD_DATASOURCE_SLIDE:
                 processMsgLoadDatasourceSlide(data);
                 break;
-            case topics.SNAPSHOT_DS_DATA_REQUEST:
-                processMsgSnapshotDsDataRequest(data);
-                break;
             case topics.DELETE_DATASOURCE:
                 processMsgDeleteDatasource(data);
                 break;
@@ -63,11 +58,6 @@ class DatasourceStore {
         this._lastConfigUpdate[did] = now;
     }
 
-    updateLastDataUpdate (did) {
-        var now=new Date().getTime();
-        this._lastDataUpdate[did] = now;
-    }
-
     getLastConfigUpdate (did) {
         if (this._lastConfigUpdate.hasOwnProperty(did)) {
             return this._lastConfigUpdate[did];
@@ -76,27 +66,151 @@ class DatasourceStore {
         }
     }
 
-    getLastDataUpdate (did) {
-        if (this._lastDataUpdate.hasOwnProperty(did)) {
-            return this._lastDataUpdate[did];
+    addIntervalRequested ({did, its, ets} = {}) {
+        var now = new Date().getTime();
+        if (!this._intervalsRequested.hasOwnProperty(did)) {
+            this._intervalsRequested[did] = [];
+            var data = {
+                its: its,
+                ets: ets,
+                updated: now,
+            };
+            this._intervalsRequested[did].push(data);
         } else {
-            return 0;
+            var overlaps = [];
+            var withoutOverlaps = this._intervalsRequested[did].filter (i => {
+                if (i.ets > its && i.its <= its) {
+                    overlaps.push(i);
+                    return false;
+                } else if (i.its < ets && i.ets >= ets) {
+                    overlaps.push(i);
+                    return false;
+                } else if (i.its >= its && i.ets <= ets) {
+                    overlaps.push(i);
+                    return false;
+                } else if (i.its <= its && i.ets >= ets) {
+                    overlaps.push(i);
+                    return false;
+                } else {
+                    return true;
+                }
+            });
+            overlaps.forEach( i => {
+                if (i.its == i.ets) {
+                    return;
+                } else if (i.its >= its && i.ets <= ets) {
+                    return;
+                } else if (i.its < its && i.ets >= its ) {
+                    withoutOverlaps.push({its:i.its, ets:its, updated:i.updated});
+                } else if (i.its <= ets && i.ets > ets) {
+                    withoutOverlaps.push({its:ets, ets:i.ets, updated:i.updated});
+                } else if (i.its < its && i.ets > ets) {
+                    withoutOverlaps.push({its:i.its, ets:its, updated:i.updated});
+                    withoutOverlaps.push({its:ets, ets:i.ets, updated:i.updated});
+                }
+            });
+            withoutOverlaps.push({its:its, ets:ets, updated: now});
+            withoutOverlaps.sort( (a,b) => a.ets - b.ets);
+            this._intervalsRequested[did]=withoutOverlaps;
         }
     }
 
-    updateLastSnapshotDataUpdate (did,seq) {
-        var now=new Date().getTime();
-        if (!this._lastSnapshotDataUpdate.hasOwnProperty(did)) {
-            this._lastSnapshotDataUpdate[did]={};
-        }
-        this._lastSnapshotDataUpdate[did][seq] = now;
-    }
-
-    getLastSnapshotDataUpdate (did, seq) {
-        if (this._lastSnapshotDataUpdate[did] && this._lastSnapshotDataUpdate[did][seq]) {
-            return this._lastSnapshotDataUpdate[did][seq];
+    getIntervalsToRequest({did, its, ets, onlyMissing} = {}) {
+        var now = new Date().getTime();
+        var intervals = [];
+        if (!this._intervalsRequested.hasOwnProperty(did)) {
+            intervals.push({its:its, ets:ets});
+            return intervals;
+        } else if (!its && !ets) {
+            //obtenemos el ultimo valor recuperado y lo establecemos como limite inferior
+            var lastInterval = this._intervalsRequested[did][this._intervalsRequested[did].length-1];
+            intervals.push({its:lastInterval.ets, ets:ets});
+            return intervals;
+        } else if (!ets) {
+            var slidingIndex = its;
+            var fixedIndex = null;
+            var direction = 1;
         } else {
-            return 0;
+            var slidingIndex = ets;
+            var fixedIndex = its;
+            var direction = -1;
+        }
+        var overlaps = this._intervalsRequested[did].filter( i => {
+            if (direction == -1) {
+                if (i.ets >= slidingIndex && i.its < slidingIndex) {
+                    return true;
+                } else {
+                    return false;
+                }
+            } else {
+                if (i.its <= slidingIndex && i.ets > slidingIndex) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        });
+        if (overlaps.length == 0) {
+            var closestLeft = null;
+            var closestRight = null;
+            var requestInterval = true;
+            this._intervalsRequested[did].forEach( i => {
+                if (i.ets < slidingIndex) {
+                    if (!closestLeft || closestLeft < i.ets) {
+                        closestLeft = i.ets;
+                    }
+                } else if (i.its > slidingIndex) {
+                    if (!closestRight || closestRight > i.its) {
+                        closestRight = i.its;
+                    }
+                }
+            });
+        } else if (overlaps.length == 1) {
+            var closestLeft = overlaps[0].its;
+            var closestRight = overlaps[0].ets;
+            if (now > overlaps[0].updated + this.minDataRequestIntervalms && !onlyMissing) {
+                console.log('requestInterval true',closestLeft, ets);
+                var requestInterval = true;
+            } else {
+                console.log('requestInterval false',closestLeft, ets);
+                var requestInterval = false;
+            }
+        }
+        if (!its) {
+            if (requestInterval) {
+                intervals.push({its:closestLeft, ets:slidingIndex});
+            }
+            return intervals;
+        } else if (!ets) {
+            if (requestInterval) {
+                intervals.push({its:slidingIndex, ets:closestRight});
+            }
+            return intervals;
+        } else {
+            if (direction == -1) {
+                if (closestLeft > its) {
+                    if (requestInterval) {
+                        intervals.push({its:closestLeft, ets:ets});
+                    }
+                    var newEts = closestLeft;
+                    var newIntervals = this.getIntervalsToRequest({did:did, its:its, ets:newEts, onlyMissing:onlyMissing});
+                    newIntervals.forEach( i => intervals.push(i));
+                } else if (requestInterval) {
+                    intervals.push({its:its, ets:ets});
+                }
+            } else {
+                if (closestRight < ets) {
+                    if (requestInterval) {
+                        intervals.push({its:its, ets:closestRight});
+                    }
+                    var newIts = closestRight;
+                    var newIntervals = this.getIntervalsToRequest({did:did, its:newIts, ets:ets, onlyMissing:onlyMissing});
+                    newIntervals.forEach ( i => intervals.push(i));
+                } else if (requestInterval) {
+                    intervals.push({its:its, ets:ets});
+                }
+            }
+            return intervals;
         }
     }
 
@@ -128,61 +242,115 @@ class DatasourceStore {
         }
     }
 
-    getData ({did, force}={}) {
-        var now=new Date().getTime();
-        var elapsed = now - this.getLastDataUpdate(did);
-        if ( force == true || elapsed > this.minDataRequestIntervalms) {
-            var data;
-            var promise = new Promise( (resolve, reject) => {
-                $.ajax({
-                    url: '/var/ds/'+did,
-                    dataType: 'json',
-                })
-                .done( response => {
-                    var result = this.storeData(did, response);
-                    this.updateLastDataUpdate(did);
-                    if (result.modified == true) {
-                        var topic = topics.DATASOURCE_DATA_UPDATE(did);
-                        PubSub.publish(topic,did);
+    getData ({did, its, ets, tid, onlyMissing}={}) {
+        var responseData;
+        var requestInterval = (subinterval) => {
+            var parameters = {};
+            if (subinterval.its) {
+                parameters.its=subinterval.its;
+            }
+            if (subinterval.ets) {
+                parameters.ets=subinterval.ets;
+            }
+            if (tid) {
+                parameters.t = tid;
+            }
+            console.log('dentro requestInterval',subinterval);
+            return $.ajax({
+                url: '/var/ds/'+did,
+                dataType: 'json',
+                data: parameters,
+            })
+            .done(response => {
+                if (response.length > 0) {
+                    var closedInterval = false;
+                    var receivedTs=response.map(e => e.ts);
+                    var intervalReceived = {
+                        ets:Math.max.apply(null, receivedTs),
                     }
-                    data = response;
-                    resolve(data);
+                    if (subinterval.its && subinterval.ets) {
+                        closedInterval = true;
+                        intervalReceived.its = subinterval.its;
+                    }
+                    if (!closedInterval || response.length == 10) {
+                        intervalReceived.its = Math.min.apply(null, receivedTs);
+                    }
+                    if (response.length == 10 && closedInterval) {
+                        var newInterval = {
+                            its:subinterval.its,
+                            ets:receivedInterval.its
+                        }
+                        console.log('requestInterval',newInterval);
+                        requestInterval(newInterval);
+                    }
+                    var result = this.storeData(did, tid, response);
+                    if (!subinterval.ets) {
+                        if (result.modified) {
+                            console.log('voy a lanzar el speedUP');
+                            this.speedUpRequest(did,'requestDatasourceData');
+                        } else {
+                            console.log('voy a lanzar el slowDown');
+                            this.slowDownRequest(did,'requestDatasourceData');
+                        }
+                    }
+                    this.addIntervalRequested({did:did, its:intervalReceived.its, ets:intervalReceived.ets});
+                    if (result.modified) {
+                        var topic = topics.DATASOURCE_DATA_UPDATE(did);
+                        PubSub.publish(topic, {interval:intervalReceived});
+                    }
+                }
+            })
+            .fail( data => {console.log('no data for interval',subinterval,data);});
+        }
+        var intervals = this.getIntervalsToRequest({did:did, its:its, ets:ets, onlyMissing:onlyMissing});
+        console.log('intervals to request',intervals);
+        if (intervals.length == 0) {
+            responseData = this._getIntervalData({did:did, its:its, ets:ets});
+            return Promise.resolve({did:did,data:responseData});
+        } else {
+            return new Promise ( (resolve, reject) => {
+                var requests = intervals.map( i => requestInterval(i));
+                Promise.all(requests).then( values => {
+                    responseData = this._getIntervalData({did:did, its:its, ets:ets});
+                    resolve ({did:did,data:responseData});
+                })
+                .catch( values => {
+                    responseData = this._getIntervalData({did:did, its:its, ets:ets});
+                    resolve ({did:did,data:responseData});
                 });
             });
-            return promise;
-        } else {
-            var data = this._datasourceData[did];
-            return Promise.resolve(data);
         }
     }
 
-    getSnapshotData (did, seq, tid) {
-        var now=new Date().getTime();
-        var elapsed = now - this.getLastSnapshotDataUpdate(did, seq);
-        if ( elapsed > this.minSnapshotRequestIntervalms) {
-            var data;
-            var promise = new Promise( (resolve, reject) => {
-                var requestParams={t:tid,seq:seq};
-                $.ajax({
-                    url: '/var/ds/'+did,
-                    dataType: 'json',
-                    data: requestParams,
-                })
-                .done( response => {
-                    var result = this.storeSnapshotData(did, response);
-                    this.updateLastSnapshotDataUpdate(did, seq);
-                    if (result.modified == true) {
-                        var topic = topics.SNAPSHOT_DS_DATA_UPDATE(did);
-                        PubSub.publish(topic,{seq:seq});
+    _getIntervalData ({did, its, ets}={}) {
+        var data = [];
+        if (this._datasourceData.hasOwnProperty(did)) {
+            Object.keys(this._datasourceData[did]).forEach( key => {
+                if (!its && !ets) {
+                    data.push(this._datasourceData[did][key]);
+                } else if (its && ets) {
+                    if (its <= key && key <= ets) {
+                        data.push(this._datasourceData[did][key]);
                     }
-                    data = response;
-                    resolve(data);
-                });
+                } else if (its) {
+                    if (its <= key) {
+                        data.push(this._datasourceData[did][key]);
+                    }
+                } else if (ets) {
+                    if (key <= ets) {
+                        data.push(this._datasourceData[did][key]);
+                    }
+                }
             });
-            return promise;
+        }
+        console.log('datos',did,its,ets,data);
+        //We sort in descending order (when getting datapoint data is in ascending order)
+        if (!its || !ets) {
+            data.sort( (a,b) => b.ts - a.ts);
+            return data.slice(Math.max(data.length - 10, 0));
         } else {
-            var data = this._snapshotData[did][seq];
-            return Promise.resolve(data);
+            data.sort( (a,b) => b.ts - a.ts);
+            return data;
         }
     }
 
@@ -215,13 +383,17 @@ class DatasourceStore {
         var exists = this._registeredRequests.some(el => el.did == id && el.requestType == type);
         if (!exists) {
             var now = new Date().getTime();
-            this._registeredRequests.push({
+            var request = {
                 requestType:type,
                 did:id,
                 interval:interval,
                 previousInterval: interval,
                 nextRequest:now + interval
-            });
+            }
+            if (type == 'requestDatasourceData') {
+                request.intervalsRequested=[];
+            }
+            this._registeredRequests.push(request);
         }
     }
 
@@ -232,6 +404,7 @@ class DatasourceStore {
 
     slowDownRequest (id, type) {
         var reqArray=this._registeredRequests.filter(el => el.did == id && el.requestType == type );
+        console.log('slowDown reqArray',id, type, reqArray,this._registeredRequests)
         if (reqArray.length == 1 && reqArray[0].interval<1800000) {
             var now = new Date().getTime();
             if (reqArray[0].previousInterval > reqArray[0].interval) {
@@ -242,11 +415,13 @@ class DatasourceStore {
             reqArray[0].previousInterval = reqArray[0].interval;
             reqArray[0].interval=interval;
             reqArray[0].nextRequest=now + interval;
+            console.log('slowDownRequest',id,type,interval);
         }
     }
 
     speedUpRequest (id, type) {
         var reqArray=this._registeredRequests.filter( el => el.did == id && el.requestType == type );
+        console.log('speedUp reqArray',id, type, reqArray,this._registeredRequests)
         if (reqArray.length == 1 && reqArray[0].interval>30000) {
             var now = new Date().getTime();
             if (reqArray[0].previousInterval < reqArray[0].interval) {
@@ -257,23 +432,33 @@ class DatasourceStore {
             reqArray[0].previousInterval = reqArray[0].interval;
             reqArray[0].interval=interval;
             reqArray[0].nextRequest=now + interval;
+            console.log('speedUpRequest',id,type,interval);
         }
     }
 
-    storeData (did, data) {
+    storeData (did, tid, data) {
+        console.log('storeData',data)
         var result = {};
-        if (!this._datasourceData.hasOwnProperty(did)) {
-            this.addRegisteredRequest(did,'requestDatasourceData',60000);
-            this._datasourceData[did]=data;
-            result.modified = true;
-        } else if (data.ts && data.ts>this._datasourceData[did].ts) {
-            this._datasourceData[did]=data;
-            result.modified = true;
-        }
-        if (result.modified) {
-            this.speedUpRequest(did,'requestDatasourceData');
+        if (this._datasourceData.hasOwnProperty(did)) {
+            Object.keys(data).forEach( key => {
+                if (!this._datasourceData[did].hasOwnProperty(data[key].ts) ||
+                    this._datasourceData[did][data[key].ts].content != data[key].content ||
+                    this._datasourceData[did][data[key].ts].variables.length != data[key].variables.length ||
+                    this._datasourceData[did][data[key].ts].datapoints.length != data[key].datapoints.length) {
+                    this._datasourceData[did][data[key].ts]=data[key];
+                    result.modified = true;
+                }
+            });
         } else {
-            this.slowDownRequest(did,'requestDatasourceData');
+            if (!tid) {
+                this.addRegisteredRequest(did,'requestDatasourceData',60000);
+            }
+            this._datasourceData[did]={};
+            data.sort( (a,b) => a.ts - b.ts);
+            Object.keys(data).forEach( key => {
+                this._datasourceData[did][data[key].ts]=data[key];
+            });
+            result.modified = true;
         }
         return result;
     }
@@ -296,29 +481,6 @@ class DatasourceStore {
         return result;
     }
 
-    storeSnapshotData (did, data) {
-        var result = {};
-        if (data.seq) {
-            if (!this._snapshotData.hasOwnProperty(did)) {
-                this._snapshotData[did]={};
-                result.modified = true;
-            }
-            if (!this._snapshotData[did].hasOwnProperty(data.seq)) {
-                this._snapshotData[did][data.seq]=data;
-                result.modified = true;
-            } else {
-                var differs = Object.keys(data).some (key => {
-                    return !(this._snapshotData[did][data.seq].hasOwnProperty(key) && this._snapshotData[did][data.seq][key] == data[key]);
-                });
-                if (differs) {
-                    this._snapshotData[did][data.seq] = data;
-                    result.modified = true;
-                }
-            }
-        }
-        return result
-    }
-
     deleteDatasource (did) {
         var response;
         var promise = new Promise( (resolve, reject) => {
@@ -335,9 +497,6 @@ class DatasourceStore {
                     this.deleteRegisteredRequest(msgData.did,'requestDatasourceData');
                     if (this._lastConfigUpdate.hasOwnProperty(did)) {
                         delete this._lastConfigUpdate[did];
-                    }
-                    if (this._lastDataUpdate.hasOwnProperty(did)) {
-                        delete this._lastDataUpdate[did];
                     }
                     if (this._datasourceConfig.hasOwnProperty(did)) {
                         delete this._datasourceConfig[did];
@@ -381,13 +540,21 @@ function processMsgDatasourceConfigRequest (msgData) {
     }
 }
 
-function getDatasourceData (did) {
-    return datasourceStore.getData({did:did});
+function getDatasourceData ({did, interval, tid, onlyMissing}) {
+    if (interval) {
+        return datasourceStore.getData({did:did, its:interval.its, ets:interval.ets, tid:tid, onlyMissing:onlyMissing});
+    } else {
+        return datasourceStore.getData({did:did, tid:tid, onlyMissing:onlyMissing});
+    }
 }
 
 function processMsgDatasourceDataRequest (msgData) {
-    if (msgData.did) {
-        datasourceStore.getData({did:msgData.did, force:msgData.force});
+    if (msgData.hasOwnProperty('did')) {
+        if (msgData.hasOwnProperty('interval')) {
+            datasourceStore.getData({did:msgData.did, its:msgData.interval.its, ets:msgData.interval.ets, tid:msgData.tid, onlyMissing:msgData.onlyMissing});
+        } else {
+            datasourceStore.getData({did:msgData.did, tid:msgData.tid, onlyMissing:msgData.onlyMissing});
+        }
     }
 }
 
@@ -397,16 +564,6 @@ function processMsgLoadDatasourceSlide (msgData) {
         config.then( data => {
             PubSub.publish(topics.LOAD_SLIDE,{wid:data.wid});
         });
-    }
-}
-
-function getDatasourceSnapshotData(did, seq, tid) {
-    return datasourceStore.getSnapshotData(did, seq, tid);
-}
-
-function processMsgSnapshotDsDataRequest (msgData) {
-    if (data.hasOwnProperty('did') && data.hasOwnProperty('tid') && data.hasOwnProperty('seq')) {
-        datasourceStore.getSnapshotData(msgData.did, msgData.seq, msgData.tid);
     }
 }
 
@@ -433,6 +590,5 @@ function processMsgDeleteDatasource(msgData) {
 export {
     getDatasourceConfig,
     getDatasourceData,
-    getDatasourceSnapshotData,
 }
 

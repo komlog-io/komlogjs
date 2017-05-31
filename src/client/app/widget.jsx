@@ -5,7 +5,7 @@ import * as ReactBootstrap from 'react-bootstrap';
 import * as d3 from 'd3';
 import * as utils from './utils.js';
 import {getWidgetConfig} from './widget-store.js';
-import {getDatasourceConfig, getDatasourceData, getDatasourceSnapshotData} from './datasource-store.js';
+import {getDatasourceConfig, getDatasourceData} from './datasource-store.js';
 import {getDatapointConfig, getDatapointData} from './datapoint-store.js';
 import {getNodeInfoByUri} from './uri-store.js';
 import {d3TimeSlider, d3Linegraph, d3Histogram} from './graphs.jsx';
@@ -754,18 +754,18 @@ class WidgetConfigDs extends React.Component {
 
     showFeedbackModal = () => {
         var newState = {};
-        var dsData = getDatasourceData(this.state.did);
+        var dsData = getDatasourceData({did:this.state.did});
         var dsConfig = getDatasourceConfig(this.state.did);
         this.setState({feedbackModal:true, loadingFeedbackModal:true});
         Promise.all([dsConfig, dsData]).then( values  => {
             var dpPromises = values[0].pids.map (pid => getDatapointConfig(pid));
 
             newState.datasourcename = values[0].datasourcename
-            newState.dsData = values[1];
-            newState.dsDatapoints = values[1].datapoints.map( dp => {
+            newState.dsData = values[1].data[0];
+            newState.dsDatapoints = values[1].data[0].datapoints.map( dp => {
                 return {pid:dp.pid,index:dp.index,c:'#eee'}
             });
-            newState.seq = values[1].seq;
+            newState.seq = values[1].data[0].seq;
             newState.dpsInfo= [];
 
             Promise.all(dpPromises).then( dpConfigs => {
@@ -1503,7 +1503,7 @@ class WidgetDs extends React.Component {
         var newState = {};
         var widget = await getWidgetConfig (this.props.wid);
         var dsConfig = getDatasourceConfig(widget.did);
-        var dsData = getDatasourceData(widget.did);
+        var dsData = getDatasourceData({did:widget.did});
 
         var subscribedTopics = [
             topics.WIDGET_CONFIG_UPDATE(this.props.wid),
@@ -1520,9 +1520,10 @@ class WidgetDs extends React.Component {
 
             newState.did = values[0].did;
             newState.datasourcename = values[0].datasourcename;
-            newState.dsData = values[1];
-            newState.timestamp = values[1].ts;
-            newState.seq = values[1].seq;
+            console.log('data received',values[1]);
+            newState.dsData = values[1].data[0];
+            newState.timestamp = values[1].data[0].ts;
+            newState.seq = values[1].data[0].seq;
             newState.datapoints = [];
 
             Promise.all(dpPromises).then( dpConfigs => {
@@ -1631,17 +1632,17 @@ class WidgetDs extends React.Component {
 
     async refreshData () {
         var shouldUpdate = false;
-        var dsData = await getDatasourceData (this.state.did);
-        if (this.state.timestamp < dsData.ts) {
+        var dsData = await getDatasourceData ({did:this.state.did});
+        if (dsData && this.state.timestamp < dsData.data[0].ts) {
             shouldUpdate = true;
-        } else if (this.state.timestamp == dsData.ts) {
-            if (this.state.dsData.datapoints.length != dsData.datapoints.length) {
+        } else if (dsData && this.state.timestamp == dsData.data[0].ts) {
+            if (this.state.dsData.datapoints.length != dsData.data[0].datapoints.length) {
                 shouldUpdate = true;
             }
         }
         if (shouldUpdate) {
             this.refreshDpData();
-            this.setState({dsData:dsData, timestamp:dsData.ts,seq:dsData.seq});
+            this.setState({dsData:dsData.data[0], timestamp:dsData.data[0].ts,seq:dsData.data[0].seq});
         }
     }
 

@@ -1,4 +1,3 @@
-import * as d3 from 'd3';
 import PubSub from 'pubsub-js';
 import $ from 'jquery';
 import {topics} from './types.js';
