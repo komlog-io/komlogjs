@@ -1139,7 +1139,7 @@ class WidgetConfigDp extends React.Component {
                           <ReactBootstrap.Form inline>
                             <ReactBootstrap.FormGroup>
                               <ReactBootstrap.InputGroup>
-                                <ReactBootstrap.FormControl placeholder={this.state.color} value={this.state.newColor} bsSize="xsmall" type="text" onChange={this.handleChange} />
+                                <ReactBootstrap.FormControl placeholder={this.state.color} value={this.state.newColor} bsSize="small" type="text" onChange={this.handleChange} />
                                 <ReactBootstrap.InputGroup.Addon>{boxColor}</ReactBootstrap.InputGroup.Addon>
                               </ReactBootstrap.InputGroup>
                             </ReactBootstrap.FormGroup>
@@ -1495,6 +1495,8 @@ class WidgetDs extends React.Component {
         shareModal:false,
         shareCounter:this.props.shareCounter,
         downloadCounter:this.props.downloadCounter,
+        activeVis:0,
+        interval: null,
     };
 
     subscriptionTokens = [];
@@ -1521,10 +1523,12 @@ class WidgetDs extends React.Component {
             newState.did = values[0].did;
             newState.datasourcename = values[0].datasourcename;
             console.log('data received',values[1]);
-            newState.dsData = values[1].data[0];
-            newState.timestamp = values[1].data[0].ts;
             newState.seq = values[1].data[0].seq;
+            newState.dsData = [values[1].data[0]];
             newState.datapoints = [];
+            newState.interval = {its:values[1].data[0].ts, ets:values[1].data[0].ts};
+            newState.intLength = 0;
+            newState.activeVis = 0;
 
             Promise.all(dpPromises).then( dpConfigs => {
 
@@ -1553,7 +1557,7 @@ class WidgetDs extends React.Component {
                 this.setState(newState);
             });
 
-            var anomUri = values[0].datasourcename+'._k.anomaly';
+            var anomUri = values[0].datasourcename+'._anomaly';
             var anomDp = getNodeInfoByUri(anomUri);
             anomDp.then( (val) => {
                 if (val && val.hasOwnProperty('id') && val.hasOwnProperty('type') && val.type == 'p') {
@@ -1625,24 +1629,55 @@ class WidgetDs extends React.Component {
     }
 
     downloadContent = () => {
-        if (this.state.dsData.content && this.state.dsData.content.length>0) {
-            utils.downloadFile(this.state.datasourcename+'.txt',this.state.dsData.content,'text/plain');
+        if (this.state.dsData.length > 0) {
+            var content = [];
+            this.state.dsData.forEach( d => {
+                content.push(new Date(d.ts*1000).toISOString());
+                content.push(d.content);
+            });
+            utils.downloadFile(this.state.datasourcename+'.txt',content.join('\n'),'text/plain');
         }
     }
 
-    async refreshData () {
+    async refreshData (intLength) {
+        var now = new Date().getTime()/1000;
+        if (intLength == null) {
+            intLength = this.state.intLength;
+        }
+        if (intLength > 0) {
+            var interval = {ets:now, its:now-intLength};
+        } else {
+            var interval = {ets:null, its:null};
+        }
         var shouldUpdate = false;
-        var dsData = await getDatasourceData ({did:this.state.did});
-        if (dsData && this.state.timestamp < dsData.data[0].ts) {
+        var dsData = await getDatasourceData ({did:this.state.did, interval:interval});
+        console.log('refreshData',this.state.did, interval, this.state.intLength, dsData);
+        if (interval.its == null && dsData.data.length > 0) {
+            var data = [dsData.data[0]];
+        } else {
+            var data = dsData.data
+        }
+        if (data.length != this.state.dsData.length) {
             shouldUpdate = true;
-        } else if (dsData && this.state.timestamp == dsData.data[0].ts) {
-            if (this.state.dsData.datapoints.length != dsData.data[0].datapoints.length) {
+        } else if (data.length > 0) {
+            if (this.state.dsData[0].ts != data[0].ts) {
+                shouldUpdate = true;
+            } else if (this.state.dsData[0].datapoints.length != data[0].datapoints.length) {
                 shouldUpdate = true;
             }
         }
         if (shouldUpdate) {
             this.refreshDpData();
-            this.setState({dsData:dsData.data[0], timestamp:dsData.data[0].ts,seq:dsData.data[0].seq});
+            if (interval.its == null) {
+                interval = {ets:data[0].ts, its:data[0].ts};
+            }
+            if (data.length > 0) {
+                interval = {ets:data[0].ts, its:data[0].ts-intLength};
+                var seq = data[0].seq;
+            } else {
+                var seq = null;
+            }
+            this.setState({dsData:data, interval:interval, seq:seq});
         }
     }
 
@@ -1714,10 +1749,31 @@ class WidgetDs extends React.Component {
         }
     }
 
+    selectVis = (event) => {
+        event.preventDefault();
+        var buttonId=parseInt(event.target.id);
+        if (this.state.activeVis != buttonId) {
+            var now = new Date().getTime()/1000;
+            if (buttonId == 4) {
+                var intLength = 172800;
+            } else if (buttonId == 3) {
+                var intLength = 86400;
+            } else if (buttonId == 2) {
+                var intLength = 21600;
+            } else if (buttonId == 1) {
+                var intLength = 3600;
+            } else if (buttonId == 0) {
+                var intLength = 0;
+            }
+            this.setState({activeVis:buttonId, intLength:intLength});
+            this.refreshData(intLength);
+        }
+    }
+
     getDsInfo () {
-        if (this.state.timestamp) {
+        if (this.state.interval.ets) {
             var dateFormat = d3.timeFormat("%Y/%m/%d - %H:%M:%S");
-            var date = new Date(this.state.timestamp*1000);
+            var date = new Date(this.state.interval.ets*1000);
             var dateText=dateFormat(date);
             return (
                 <div className="ds-info">
@@ -1743,31 +1799,51 @@ class WidgetDs extends React.Component {
 
     getFontClass () {
         var dsData = this.state.dsData;
-        if (!dsData || this.state.contentWidth == null) {
+        if (!dsData || dsData.length == 0 || this.state.contentWidth == null) {
             return 'font-normal';
         }
         var newLineRegex=/(?:\r\n|\r|\n)/g;
         var contentWidth = this.state.contentWidth;
         var normalLength = contentWidth / 8;
-        var lines = dsData.content.split(newLineRegex);
+        var lines = dsData[0].content.split(newLineRegex);
         var meanLineSize=d3.mean(lines, d => d.length > 0 ? d.length : normalLength);
         var fontClass = meanLineSize * 10 < contentWidth ? 'font-large' : meanLineSize * 6 > contentWidth ? 'font-small' : 'font-normal';
         return fontClass;
     }
 
     getHtmlContent () {
-        if (!this.state.dsData || !this.state.dsData.hasOwnProperty('content')) {
+        if (!this.state.dsData || this.state.dsData.length == 0) {
             return [];
         }
-        if (utils.isJSON(this.state.dsData.content)) {
-            return this.processJSONContent();
-        } else {
-            return this.processTextContent();
-        }
+        var contents = this.state.dsData.map( (d,i) => {
+            if (utils.isJSON(d.content)) {
+                var row = this.processJSONContent(d);
+            } else {
+                var row = this.processTextContent(d);
+            }
+            return (
+              <ReactBootstrap.Table key={i} responsive condensed>
+                <thead>
+                <tr>
+                  <th className="font-small">{this.generateDateString(d.ts)}</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                  <td>{row}</td>
+                </tr>
+                </tbody>
+              </ReactBootstrap.Table>
+            );
+        });
+        return (
+          <div>
+            {contents}
+          </div>
+        );
     }
 
-    processTextContent () {
-        var dsData = this.state.dsData;
+    processTextContent (dsData) {
         var dsDatapoints = this.state.datapoints;
         var elements=[];
         if (!dsData) {
@@ -1840,7 +1916,7 @@ class WidgetDs extends React.Component {
             if (datapointFound == false && can_edit == true) {
                 text=dsData.content.substr(position,length);
                 elements.push(
-                  <WidgetDsVariable key={numElement++} content={text} position={position} length={length} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} />
+                  <WidgetDsVariable key={numElement++} content={text} position={position} length={length} seq={dsData.seq} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} />
                 );
             } else {
                 datapointFound = false;
@@ -1864,8 +1940,7 @@ class WidgetDs extends React.Component {
         return elements;
     }
 
-    processJSONContent () {
-        var dsData = this.state.dsData;
+    processJSONContent (dsData) {
         var dsDatapoints = this.state.datapoints;
         var elements=[];
         if (!dsData) {
@@ -1912,9 +1987,9 @@ class WidgetDs extends React.Component {
                         datapointname='...';
                     }
                     if (utils.inJSONString(dsData.content, position)) {
-                        var newEl = "/*_k_type/dp/"+text+"/"+datapointname+"/"+dp.pid+"*/"
+                        var newEl = "/*_k_type/dp/"+text+"/"+datapointname+"/"+dp.pid+"/"+dsData.seq+"*/"
                     } else {
-                        var newEl = JSON.stringify({_k_type:'dp',datapointname:datapointname, pid:dp.pid, text:text});
+                        var newEl = JSON.stringify({_k_type:'dp',datapointname:datapointname, pid:dp.pid, text:text, seq:dsData.seq});
                     }
                     newContent+= newEl;
                     return true;
@@ -1925,9 +2000,9 @@ class WidgetDs extends React.Component {
                 if (can_edit) {
                     var res = utils.inJSONString(dsData.content, position)
                     if (res) {
-                        var newEl = "/*_k_type/var/"+text+"/"+position+"/"+length+"*/"
+                        var newEl = "/*_k_type/var/"+text+"/"+position+"/"+length+"/"+dsData.seq+"*/"
                     } else {
-                        var newEl = JSON.stringify({_k_type:'var', text:text, position:position, length:length});
+                        var newEl = JSON.stringify({_k_type:'var', text:text, position:position, length:length, seq:dsData.seq});
                     }
                     newContent+= newEl;
                 } else {
@@ -1951,7 +2026,7 @@ class WidgetDs extends React.Component {
         var objType = Object.prototype.toString.apply(obj)
         if (objType == '[object Object]' && obj.hasOwnProperty('_k_type')) {
             if (obj._k_type == 'var') {
-                return <WidgetDsVariable content={obj.text} position={parseInt(obj.position)} length={parseInt(obj.length)} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints}/>
+                return <WidgetDsVariable content={obj.text} position={parseInt(obj.position)} length={parseInt(obj.length)} seq={obj.seq} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints}/>
             } else if (obj._k_type == 'dp') {
                 var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{obj.datapointname}</ReactBootstrap.Tooltip>;
                 return (
@@ -2046,7 +2121,7 @@ class WidgetDs extends React.Component {
                     }
                     var params = match.split('/*_k_type')[1].split('*/')[0].split('/')
                     if (params[1] == "var") {
-                        result.push(<WidgetDsVariable key={child++} content={params[2]} position={parseInt(params[3])} length={parseInt(params[4])} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints}/>);
+                        result.push(<WidgetDsVariable key={child++} content={params[2]} position={parseInt(params[3])} length={parseInt(params[4])} seq={params[5]} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints}/>);
                     } else if (params[1] == "dp") {
                         var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{params[3]}</ReactBootstrap.Tooltip>;
                         result.push(
@@ -2084,11 +2159,11 @@ class WidgetDs extends React.Component {
         this.setState({shareModal:false});
     }
 
-    identifyVariable = (position, length, datapointname) => {
+    identifyVariable = ({position, length, seq, datapointname}) => {
         var payload ={
             p:position,
             l:length,
-            seq:this.state.seq,
+            seq:seq,
             did:this.state.did,
             datapointname:datapointname
         };
@@ -2126,6 +2201,17 @@ class WidgetDs extends React.Component {
         return (
           <div>
             {info_node}
+            <div className="row visual-bar">
+              <div className="col-sm-5 col-sm-offset-7 text-center">
+                <ReactBootstrap.ButtonGroup bsSize="xsmall">
+                  <ReactBootstrap.Button id="4" active={this.state.activeVis == 4 ? true : false} onClick={this.selectVis}>48h</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="3" active={this.state.activeVis == 3 ? true : false} onClick={this.selectVis}>24h</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="2" active={this.state.activeVis == 2 ? true : false} onClick={this.selectVis}>6h</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="1" active={this.state.activeVis == 1 ? true : false} onClick={this.selectVis}>1h</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="0" active={this.state.activeVis == 0 ? true : false} onClick={this.selectVis}>last</ReactBootstrap.Button>
+                </ReactBootstrap.ButtonGroup>
+              </div>
+            </div>
             <div className={dsClass}>
               {element_nodes}
             </div>
@@ -3025,7 +3111,7 @@ class ContentLinegraph extends React.Component {
 
     async initialization () {
         if (this.props.data.length == 1) {
-            var anomUri = this.props.data[0].datapointname+'._k.anomaly';
+            var anomUri = this.props.data[0].datapointname+'._anomaly';
             var anomDp = await getNodeInfoByUri(anomUri)
             if (anomDp && anomDp.hasOwnProperty('id') && anomDp.hasOwnProperty('type') && anomDp.type == 'p') {
                 var subscribedTopics = [
@@ -3176,7 +3262,7 @@ class WidgetDsVariable extends React.Component {
         var datapointname=this.datapointname.value;
         if (datapointname.length>1){
             this.popover.hide();
-            this.props.identifyVariableCallback(this.props.position, this.props.length, datapointname);
+            this.props.identifyVariableCallback({position:this.props.position, length:this.props.length, datapointname:datapointname, seq:this.props.seq});
         }
     }
 

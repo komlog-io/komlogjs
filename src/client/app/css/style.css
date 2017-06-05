@@ -483,6 +483,8 @@ a {
   overflow-x: scroll;
   white-space: nowrap;
   min-height: 270px;
+  max-height: 670px;
+  margin-top: 10px;
 }
 
 .datapoint-table {

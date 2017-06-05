@@ -278,7 +278,7 @@ class DatasourceStore {
                     if (response.length == 10 && closedInterval) {
                         var newInterval = {
                             its:subinterval.its,
-                            ets:receivedInterval.its
+                            ets:intervalReceived.its
                         }
                         console.log('requestInterval',newInterval);
                         requestInterval(newInterval);
@@ -347,7 +347,7 @@ class DatasourceStore {
         //We sort in descending order (when getting datapoint data is in ascending order)
         if (!its || !ets) {
             data.sort( (a,b) => b.ts - a.ts);
-            return data.slice(Math.max(data.length - 10, 0));
+            return data.slice(0,Math.min(data.length, 2));
         } else {
             data.sort( (a,b) => b.ts - a.ts);
             return data;
