@@ -1815,31 +1815,23 @@ class WidgetDs extends React.Component {
         if (!this.state.dsData || this.state.dsData.length == 0) {
             return [];
         }
-        var contents = this.state.dsData.map( (d,i) => {
+        var counter = 0;
+        var contents = [];
+        this.state.dsData.forEach( (d) => {
             if (utils.isJSON(d.content)) {
                 var row = this.processJSONContent(d);
             } else {
                 var row = this.processTextContent(d);
             }
-            return (
-              <ReactBootstrap.Table key={i} responsive condensed>
-                <thead>
-                <tr>
-                  <th className="font-small">{this.generateDateString(d.ts)}</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr>
-                  <td>{row}</td>
-                </tr>
-                </tbody>
-              </ReactBootstrap.Table>
-            );
+            contents.push(<tr key={counter++}><th className="font-small">{this.generateDateString(d.ts)}</th></tr>);
+            contents.push(<tr key={counter++}><td>{row}</td></tr>);
         });
         return (
-          <div>
+          <ReactBootstrap.Table condensed>
+            <tbody>
             {contents}
-          </div>
+            </tbody>
+          </ReactBootstrap.Table>
         );
     }
 

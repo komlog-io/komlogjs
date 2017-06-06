@@ -482,9 +482,9 @@ a {
   font-family: "Courier New", Courier, monospace;
   overflow-x: scroll;
   white-space: nowrap;
-  min-height: 270px;
+  min-height: 230px;
   max-height: 670px;
-  margin-top: 10px;
+  margin-top: 9px;
 }
 
 .datapoint-table {
