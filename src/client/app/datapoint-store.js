@@ -294,7 +294,7 @@ class DatapointStore {
                     if (response.length == 300 && closedInterval) {
                         var newInterval = {
                             its:subinterval.its,
-                            ets:receivedInterval.its
+                            ets:intervalReceived.its
                         }
                         requestInterval(newInterval);
                     }
