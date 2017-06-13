@@ -1924,24 +1924,25 @@ class WidgetDs extends React.Component {
         if (!this.state.dsData || this.state.dsData.length == 0) {
             return [];
         }
-        var counter = 0;
-        var contents = [];
-        this.state.dsData.forEach( (d) => {
-            if (utils.isJSON(d.content)) {
-                var row = this.processJSONContent(d);
-            } else {
+        if (utils.isJSON(this.state.dsData[0].content)) {
+            var content = this.processJSONContent();
+        } else {
+            var counter = 0;
+            var contents = [];
+            this.state.dsData.forEach( (d) => {
                 var row = this.processTextContent(d);
-            }
-            contents.push(<tr key={counter++}><th className="font-small">{this.generateDateString(d.ts)}</th></tr>);
-            contents.push(<tr key={counter++}><td>{row}</td></tr>);
-        });
-        return (
-          <ReactBootstrap.Table condensed>
-            <tbody>
-            {contents}
-            </tbody>
-          </ReactBootstrap.Table>
-        );
+                contents.push(<tr key={counter++}><th className="font-small">{this.generateDateString(d.ts)}</th></tr>);
+                contents.push(<tr key={counter++}><td>{row}</td></tr>);
+            });
+            var content = (
+              <ReactBootstrap.Table condensed>
+                <tbody>
+                {contents}
+                </tbody>
+              </ReactBootstrap.Table>
+            );
+        }
+        return content;
     }
 
     processTextContent (dsData) {
@@ -2041,86 +2042,154 @@ class WidgetDs extends React.Component {
         return elements;
     }
 
-    processJSONContent (dsData) {
-        var dsDatapoints = this.state.datapoints;
-        var elements=[];
-        if (!dsData) {
-            return elements;
+    processJSONContent () {
+        if (!this.state.dsData || this.state.dsData.length == 0) {
+            return null;
         }
-        var can_edit = true;
-        if (this.state.datasourcename.split(':').length > 1) {
-            var dsVars = [];
-            can_edit = false;
-            dsData.datapoints.forEach( dp => {
-                dsData.variables.forEach ( v => {
-                    if (v[0] == dp.index) {
-                        dsVars.push(v);
-                    }
-                });
-            });
-            dsVars.sort( (a,b) => a[0]-b[0]);
+        if (this.state.intLength == 0) {
+            var verticalHeading = true;
         } else {
-            dsVars = dsData.variables;
+            var verticalHeading = false;
         }
-        var numElement = 0;
-        var cursorPosition=0;
-        var newContent = ''
-        var dsSubContent, start, text, match, datapointname, position, length;
-        dsVars.forEach( v => {
-            position=v[0];
-            length=v[1];
-            newContent+=dsData.content.substr(cursorPosition,position-cursorPosition);
-            var datapointFound=dsData.datapoints.some( dp => {
-                if (dp.index == position) {
-                    text=dsData.content.substr(position,length);
-                    datapointname = null;
-                    dsDatapoints.forEach( state_dp => {
-                        if (state_dp.pid == dp.pid) {
-                            datapointname = state_dp.datapointname.split(this.state.datasourcename);
+        var dsDatapoints = this.state.datapoints;
+        var headerFields = [];
+        this.state.dsData.forEach ( d => {
+            if (utils.isJSON(d.content)) {
+                var jsonContent = JSON.parse(d.content);
+                var objType = Object.prototype.toString.apply(jsonContent)
+                if (objType == '[object Object]') {
+                    Object.keys(jsonContent).forEach( field => {
+                        if (headerFields.indexOf(field) == -1) {
+                            headerFields.push(field);
                         }
                     });
-                    if (datapointname) {
-                        datapointname = datapointname[1].slice(-20);
-                        if (datapointname.length == 20) {
-                            datapointname = "..."+datapointname;
+                }
+            }
+        });
+        headerFields.unshift('date');
+        console.log('header fields',headerFields, verticalHeading);
+        var canEdit = true;
+        if (this.state.datasourcename.split(':').length > 1) {
+            canEdit = false;
+        }
+        var dsContents=[];
+        this.state.dsData.forEach( data => {
+            if (canEdit) {
+                var dsVars = data.variables;
+            } else {
+                var dsVars = [];
+                data.datapoints.forEach( dp => {
+                    data.variables.forEach ( v => {
+                        if (v[0] == dp.index) {
+                            dsVars.push(v);
                         }
-                    } else {
-                        datapointname='...';
+                    });
+                });
+                dsVars.sort( (a,b) => a[0]-b[0]);
+            }
+            var numElement = 0;
+            var cursorPosition=0;
+            var newContent = ''
+            var dsSubContent, start, text, match, datapointname, position, length;
+            dsVars.forEach( v => {
+                position=v[0];
+                length=v[1];
+                newContent+=data.content.substr(cursorPosition,position-cursorPosition);
+                var datapointFound=data.datapoints.some( dp => {
+                    if (dp.index == position) {
+                        text=data.content.substr(position,length);
+                        datapointname = null;
+                        dsDatapoints.forEach( stateDp => {
+                            if (stateDp.pid == dp.pid) {
+                                datapointname = stateDp.datapointname.split(this.state.datasourcename);
+                            }
+                        });
+                        if (datapointname) {
+                            datapointname = datapointname[1].slice(-20);
+                            if (datapointname.length == 20) {
+                                datapointname = "..."+datapointname;
+                            }
+                        } else {
+                            datapointname='...';
+                        }
+                        if (utils.inJSONString(data.content, position)) {
+                            var newEl = "/*_k_type/dp/"+text+"/"+datapointname+"/"+dp.pid+"/"+data.seq+"*/"
+                        } else {
+                            var newEl = JSON.stringify({_k_type:'dp',datapointname:datapointname, pid:dp.pid, text:text, seq:data.seq});
+                        }
+                        newContent+= newEl;
+                        return true;
                     }
-                    if (utils.inJSONString(dsData.content, position)) {
-                        var newEl = "/*_k_type/dp/"+text+"/"+datapointname+"/"+dp.pid+"/"+dsData.seq+"*/"
+                });
+                if (datapointFound == false) {
+                    text=data.content.substr(position,length);
+                    if (canEdit) {
+                        var res = utils.inJSONString(data.content, position)
+                        if (res) {
+                            var newEl = "/*_k_type/var/"+text+"/"+position+"/"+length+"/"+data.seq+"*/"
+                        } else {
+                            var newEl = JSON.stringify({_k_type:'var', text:text, position:position, length:length, seq:data.seq});
+                        }
+                        newContent+= newEl;
                     } else {
-                        var newEl = JSON.stringify({_k_type:'dp',datapointname:datapointname, pid:dp.pid, text:text, seq:dsData.seq});
+                        newContent+= text;
                     }
-                    newContent+= newEl;
-                    return true;
+                } else {
+                    datapointFound = false;
+                }
+                cursorPosition=position+length;
+            });
+            if (cursorPosition<data.content.length) {
+                newContent+=data.content.substr(cursorPosition,data.content.length-cursorPosition);
+            }
+            dsContents.push({ts:data.ts, content:newContent});
+        });
+        // ahora tenemos que crear la tabla con el json
+        if (verticalHeading) {
+            var content = JSON.parse(dsContents[0].content);
+            var rows = headerFields.map( (field,i) => {
+                if (i==0) {
+                    return <tr key={i}><td><strong>{field}</strong></td><td>{this.generateDateString(dsContents[0].ts)}</td></tr>;
+                } else {
+                    var jsonElements = this.getJSONElements(content[field]);
+                    return <tr key={i}><td><strong>{field}</strong></td><td>{jsonElements}</td></tr>;
                 }
             });
-            if (datapointFound == false) {
-                text=dsData.content.substr(position,length);
-                if (can_edit) {
-                    var res = utils.inJSONString(dsData.content, position)
-                    if (res) {
-                        var newEl = "/*_k_type/var/"+text+"/"+position+"/"+length+"/"+dsData.seq+"*/"
+            return (
+                <ReactBootstrap.Table condensed>
+                  <tbody>
+                    {rows}
+                  </tbody>
+                </ReactBootstrap.Table>
+            );
+        } else {
+            var cols = headerFields.map( (field, i) => {
+                return <th key={i}>{field}</th>;
+            });
+            var rows = dsContents.map( (dsContent,i) => {
+                var content = JSON.parse(dsContent.content);
+                var fields = headerFields.map( (field, j) => {
+                    if (j==0) {
+                        return <td key={j}>{this.generateDateString(dsContent.ts)}</td>;
                     } else {
-                        var newEl = JSON.stringify({_k_type:'var', text:text, position:position, length:length, seq:dsData.seq});
+                        return <td key={j}>{this.getJSONElements(content[field])}</td>;
                     }
-                    newContent+= newEl;
-                } else {
-                    newContent+= text;
-                }
-            } else {
-                datapointFound = false;
-            }
-            cursorPosition=position+length;
-        });
-        if (cursorPosition<dsData.content.length) {
-            newContent+=dsData.content.substr(cursorPosition,dsData.content.length-cursorPosition);
+                });
+                return <tr key={i}>{fields}</tr>;
+            });
+            return (
+                <ReactBootstrap.Table condensed>
+                  <thead>
+                    <tr>
+                      {cols}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows}
+                  </tbody>
+                </ReactBootstrap.Table>
+            );
         }
-        // ahora tenemos que crear la tabla con el json
-        var content = JSON.parse(newContent);
-        var json_elements = this.getJSONElements(content);
-        return json_elements;
     }
 
     getJSONElements (obj) {
