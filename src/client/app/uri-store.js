@@ -76,6 +76,7 @@ class UriStore {
             var p_uri = uri;
         }
         var parameters={'uri':p_uri};
+        console.log('req uri',parameters);
         return $.ajax({
             url: '/var/uri/',
             dataType: 'json',
@@ -97,7 +98,7 @@ class UriStore {
         } else {
             indexKey=uri;
         }
-        if (!(index && index.hasOwnProperty('uriIndex') && index.uriIndex.hasOwnProperty(indexKey)) || elapsed > this.minUriRequestIntervalms){
+        if ((elapsed >= this.minUriRequestIntervalms) || !(index && index.hasOwnProperty('uriIndex') && index.uriIndex.hasOwnProperty(indexKey))){
             var promise = new Promise ( (resolve,reject) => {
                 var req = this.requestUri({uri:uri, owner:owner});
                 req.done( data => {
@@ -106,7 +107,8 @@ class UriStore {
                     if (!index) {
                         index = this._remoteIndices[owner];
                     }
-                    resolve(index.uriIndex[indexKey]);
+                    var resp = index.uriIndex[indexKey];
+                    resolve(resp);
                 }).fail( (jqXHR, textStatus) => {
                     this.deleteNodeInfoByUri({uri:uri, owner:owner});
                     resolve(null);
@@ -114,7 +116,8 @@ class UriStore {
             });
             return promise;
         } else {
-            return index.uriIndex[indexKey];
+            var resp = index.uriIndex[indexKey];
+            return Promise.resolve(resp);
         }
     }
 
@@ -250,6 +253,7 @@ class UriStore {
 let uriStore = new UriStore();
 
 function getNodeInfoByUri(uri,owner) {
+    console.log('recibida getNodeInfoByUri',uri);
     return uriStore.getNodeInfoByUri({uri:uri, owner:owner});
 }
 

@@ -494,7 +494,7 @@ class DatasourceStore {
                     },
                 })
                 .then( data => {
-                    this.deleteRegisteredRequest(msgData.did,'requestDatasourceData');
+                    this.deleteRegisteredRequest(did,'requestDatasourceData');
                     if (this._lastConfigUpdate.hasOwnProperty(did)) {
                         delete this._lastConfigUpdate[did];
                     }
@@ -548,6 +548,10 @@ function getDatasourceData ({did, interval, tid, onlyMissing}) {
     }
 }
 
+function getDatasourceDataAt ({did, ts}) {
+    return datasourceStore.getData({did:did, its:ts, ets:ts});
+}
+
 function processMsgDatasourceDataRequest (msgData) {
     if (msgData.hasOwnProperty('did')) {
         if (msgData.hasOwnProperty('interval')) {
@@ -569,7 +573,7 @@ function processMsgLoadDatasourceSlide (msgData) {
 
 function processMsgDeleteDatasource(msgData) {
     if (msgData.hasOwnProperty('did')) {
-        request = datasourceStore.deleteDatasource(msgData.did);
+        var request = datasourceStore.deleteDatasource(msgData.did);
         request.then ( response => {
             if (response.success) {
                 var payload = {
@@ -590,5 +594,6 @@ function processMsgDeleteDatasource(msgData) {
 export {
     getDatasourceConfig,
     getDatasourceData,
+    getDatasourceDataAt,
 }
 

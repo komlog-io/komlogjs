@@ -336,23 +336,34 @@ class DatapointStore {
         }
     }
 
+    getDataAxis ({pid, its, ets}={}) {
+        return new Promise ((resolve, reject) => {
+            var dpData = this.getData({pid:pid, its:its, ets:ets})
+            dpData.then( data => {
+                var axis = data.data.map(item => item.ts);
+                console.log('El axis es ',axis);
+                resolve(axis);
+            });
+        });
+    }
+
     _getIntervalData ({pid, its, ets}={}) {
         var data = [];
         if (this._datapointData.hasOwnProperty(pid)) {
             Object.keys(this._datapointData[pid]).forEach( key => {
                 if (!its && !ets) {
-                    data.push({ts:key,value:this._datapointData[pid][key]});
+                    data.push({ts:parseFloat(key),value:this._datapointData[pid][key]});
                 } else if (its && ets) {
                     if (its <= key && key <= ets) {
-                        data.push({ts:key,value:this._datapointData[pid][key]});
+                        data.push({ts:parseFloat(key),value:this._datapointData[pid][key]});
                     }
                 } else if (its) {
                     if (its <= key) {
-                        data.push({ts:key,value:this._datapointData[pid][key]});
+                        data.push({ts:parseFloat(key),value:this._datapointData[pid][key]});
                     }
                 } else if (ets) {
                     if (key <= ets) {
-                        data.push({ts:key,value:this._datapointData[pid][key]});
+                        data.push({ts:parseFloat(key),value:this._datapointData[pid][key]});
                     }
                 }
             });
@@ -510,6 +521,14 @@ function getDatapointData ({pid, interval, tid, onlyMissing}) {
         return datapointStore.getData({pid:pid, its:interval.its, ets:interval.ets, tid:tid, onlyMissing:onlyMissing});
     } else {
         return datapointStore.getData({pid:pid, tid:tid, onlyMissing:onlyMissing});
+    }
+}
+
+function getDatapointTAxis ({pid, interval}) {
+    if (interval) {
+        return datapointStore.getDataAxis({pid:pid, its:interval.its, ets:interval.ets});
+    } else {
+        return datapointStore.getDataAxis({pid:pid});
     }
 }
 
@@ -722,5 +741,6 @@ function processMsgModifyDatapoint(msgData) {
 export {
     getDatapointConfig,
     getDatapointData,
+    getDatapointTAxis,
 }
 
