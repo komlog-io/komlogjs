@@ -1644,12 +1644,57 @@ class WidgetDs extends React.Component {
 
     downloadContent = () => {
         if (this.state.dsData.length > 0) {
-            var content = [];
-            this.state.dsData.forEach( d => {
-                content.push(new Date(d.ts*1000).toISOString());
-                content.push(d.content);
-            });
-            utils.downloadFile(this.state.datasourcename+'.txt',content.join('\n'),'text/plain');
+            if (utils.isJSON(this.state.dsData[0].content)) {
+                var headerFields= [];
+                this.state.dsData.forEach ( d => {
+                    if (utils.isJSON(d.content)) {
+                        var jsonContent = JSON.parse(d.content);
+                        var objType = Object.prototype.toString.apply(jsonContent)
+                        if (objType == '[object Object]') {
+                            Object.keys(jsonContent).forEach( field => {
+                                if (headerFields.indexOf(field) == -1) {
+                                    headerFields.push(field);
+                                }
+                            });
+                        }
+                    }
+                });
+                var csv='date'
+                headerFields.forEach( field => {
+                    csv+=';'+field;
+                });
+                csv+='\n';
+                this.state.dsData.forEach ( d => {
+                    csv+=new Date(d.ts*1000).toISOString();
+                    if (utils.isJSON(d.content)) {
+                        var jsonContent = JSON.parse(d.content);
+                        var objType = Object.prototype.toString.apply(jsonContent)
+                        if (objType == '[object Object]') {
+                            headerFields.forEach ( field => {
+                                var value = jsonContent[field]
+                                if (value) {
+                                    csv+=";"+value.toString();
+                                } else {
+                                    csv+=";";
+                                }
+                            });
+                        } else {
+                            csv+=";"+d.content;
+                        }
+                    } else {
+                        csv+=";"+d.content;
+                    }
+                    csv+="\n";
+                });
+                utils.downloadFile(this.state.datasourcename+'.csv',csv,'text/csv');
+            } else {
+                var content = [];
+                this.state.dsData.forEach( d => {
+                    content.push(new Date(d.ts*1000).toISOString());
+                    content.push(d.content);
+                });
+                utils.downloadFile(this.state.datasourcename+'.txt',content.join('\n'),'text/plain');
+            }
         }
     }
 
@@ -2046,28 +2091,45 @@ class WidgetDs extends React.Component {
         if (!this.state.dsData || this.state.dsData.length == 0) {
             return null;
         }
-        if (this.state.intLength == 0) {
-            var verticalHeading = true;
-        } else {
-            var verticalHeading = false;
-        }
-        var dsDatapoints = this.state.datapoints;
+        var allObjects = true;
+        var allArrayOfObjects = true;
         var headerFields = [];
         this.state.dsData.forEach ( d => {
             if (utils.isJSON(d.content)) {
                 var jsonContent = JSON.parse(d.content);
-                var objType = Object.prototype.toString.apply(jsonContent)
+                var objType = Object.prototype.toString.apply(jsonContent);
                 if (objType == '[object Object]') {
+                    allArrayOfObjects = false;
                     Object.keys(jsonContent).forEach( field => {
                         if (headerFields.indexOf(field) == -1) {
                             headerFields.push(field);
                         }
                     });
+                } else if (objType == '[object Array]') {
+                    allObjects = false;
+                    jsonContent.forEach ( arrayEl => {
+                        var elemType = Object.prototype.toString.apply(arrayEl);
+                        if (elemType == '[object Object]') {
+                            Object.keys(arrayEl).forEach( field => {
+                                if (headerFields.indexOf(field) == -1) {
+                                    headerFields.push(field);
+                                }
+                            });
+                        } else {
+                            allArrayOfObjects = false;
+                        }
+                    });
+                } else {
+                    allArrayOfObjects = false;
+                    allObjects = false;
                 }
+            } else {
+                allArrayOfObjects = false;
+                allObjects = false;
             }
         });
         headerFields.unshift('date');
-        console.log('header fields',headerFields, verticalHeading);
+        var dsDatapoints = this.state.datapoints;
         var canEdit = true;
         if (this.state.datasourcename.split(':').length > 1) {
             canEdit = false;
@@ -2145,45 +2207,101 @@ class WidgetDs extends React.Component {
             dsContents.push({ts:data.ts, content:newContent});
         });
         // ahora tenemos que crear la tabla con el json
-        if (verticalHeading) {
-            var content = JSON.parse(dsContents[0].content);
-            var rows = headerFields.map( (field,i) => {
-                if (i==0) {
-                    return <tr key={i}><td><strong>{field}</strong></td><td>{this.generateDateString(dsContents[0].ts)}</td></tr>;
-                } else {
-                    var jsonElements = this.getJSONElements(content[field]);
-                    return <tr key={i}><td><strong>{field}</strong></td><td>{jsonElements}</td></tr>;
-                }
+        if (allObjects) {
+            console.log('todo objetos',headerFields);
+            if (this.state.intLength == 0) {
+                var verticalHeading = true;
+            } else {
+                var verticalHeading = false;
+            }
+            if (verticalHeading) {
+                var content = JSON.parse(dsContents[0].content);
+                var rows = headerFields.map( (field,i) => {
+                    if (i==0) {
+                        return <tr key={i}><td><strong>{field}</strong></td><td>{this.generateDateString(dsContents[0].ts)}</td></tr>;
+                    } else {
+                        var jsonElements = this.getJSONElements(content[field]);
+                        return <tr key={i}><td><strong>{field}</strong></td><td>{jsonElements}</td></tr>;
+                    }
+                });
+                return (
+                    <ReactBootstrap.Table condensed>
+                      <tbody>
+                        {rows}
+                      </tbody>
+                    </ReactBootstrap.Table>
+                );
+            } else {
+                var cols = headerFields.map( (field, i) => {
+                    return <th key={i}>{field}</th>;
+                });
+                var rows = dsContents.map( (dsContent,i) => {
+                    var content = JSON.parse(dsContent.content);
+                    var fields = headerFields.map( (field, j) => {
+                        if (j==0) {
+                            return <td key={j}>{this.generateDateString(dsContent.ts)}</td>;
+                        } else {
+                            return <td key={j}>{this.getJSONElements(content[field])}</td>;
+                        }
+                    });
+                    return <tr key={i}>{fields}</tr>;
+                });
+                return (
+                    <ReactBootstrap.Table condensed hover>
+                      <thead>
+                        <tr>
+                          {cols}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows}
+                      </tbody>
+                    </ReactBootstrap.Table>
+                );
+            }
+        } else if (allArrayOfObjects) {
+            console.log('todo Array de objetos',headerFields);
+            var cols = headerFields.map( (field, i) => {
+                return <th key={i}>{field}</th>;
+            });
+            var rows = dsContents.map( (dsContent,i) => {
+                var content = JSON.parse(dsContent.content);
+                var row = content.map( (item,j) => {
+                    var rowItems = []
+                    headerFields.forEach ( (field,k) => {
+                        if (j==0 && k==0) {
+                            rowItems.push(<td key={k} rowSpan={content.length.toString()}>{this.generateDateString(dsContent.ts)}</td>);
+                        } else if (k!=0){
+                            rowItems.push(<td key={k}>{this.getJSONElements(item[field])}</td>);
+                        }
+                    });
+                    return <tr key={j}>{rowItems}</tr>;
+                });
+                return row;
             });
             return (
-                <ReactBootstrap.Table condensed>
+                <ReactBootstrap.Table condensed hover>
+                  <thead>
+                    <tr>
+                      {cols}
+                    </tr>
+                  </thead>
                   <tbody>
                     {rows}
                   </tbody>
                 </ReactBootstrap.Table>
             );
         } else {
-            var cols = headerFields.map( (field, i) => {
-                return <th key={i}>{field}</th>;
-            });
-            var rows = dsContents.map( (dsContent,i) => {
+            console.log('Generico',headerFields);
+            var counter = 0;
+            var rows = [];
+            dsContents.forEach( dsContent => {
                 var content = JSON.parse(dsContent.content);
-                var fields = headerFields.map( (field, j) => {
-                    if (j==0) {
-                        return <td key={j}>{this.generateDateString(dsContent.ts)}</td>;
-                    } else {
-                        return <td key={j}>{this.getJSONElements(content[field])}</td>;
-                    }
-                });
-                return <tr key={i}>{fields}</tr>;
+                rows.push(<tr key={counter++}><td>{this.generateDateString(dsContent.ts)}</td></tr>);
+                rows.push(<tr key={counter++}><td>{this.getJSONElements(content)}</td></tr>);
             });
             return (
                 <ReactBootstrap.Table condensed>
-                  <thead>
-                    <tr>
-                      {cols}
-                    </tr>
-                  </thead>
                   <tbody>
                     {rows}
                   </tbody>
