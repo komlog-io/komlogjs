@@ -1909,11 +1909,11 @@ class WidgetDs extends React.Component {
         if (this.state.activeVis != buttonId) {
             var now = new Date().getTime()/1000;
             if (buttonId == 4) {
-                var intLength = 172800;
-            } else if (buttonId == 3) {
                 var intLength = 86400;
-            } else if (buttonId == 2) {
+            } else if (buttonId == 3) {
                 var intLength = 21600;
+            } else if (buttonId == 2) {
+                var intLength = 7200;
             } else if (buttonId == 1) {
                 var intLength = 3600;
             } else if (buttonId == 0) {
@@ -2736,9 +2736,9 @@ class WidgetDs extends React.Component {
                   {addFilter}
                 </ReactBootstrap.ButtonGroup>
                 <ReactBootstrap.ButtonGroup bsSize="xsmall">
-                  <ReactBootstrap.Button id="4" active={this.state.activeVis == 4 ? true : false} onClick={this.selectVis}>48h</ReactBootstrap.Button>
-                  <ReactBootstrap.Button id="3" active={this.state.activeVis == 3 ? true : false} onClick={this.selectVis}>24h</ReactBootstrap.Button>
-                  <ReactBootstrap.Button id="2" active={this.state.activeVis == 2 ? true : false} onClick={this.selectVis}>6h</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="4" active={this.state.activeVis == 4 ? true : false} onClick={this.selectVis}>24h</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="3" active={this.state.activeVis == 3 ? true : false} onClick={this.selectVis}>6h</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="2" active={this.state.activeVis == 2 ? true : false} onClick={this.selectVis}>2h</ReactBootstrap.Button>
                   <ReactBootstrap.Button id="1" active={this.state.activeVis == 1 ? true : false} onClick={this.selectVis}>1h</ReactBootstrap.Button>
                   <ReactBootstrap.Button id="0" active={this.state.activeVis == 0 ? true : false} onClick={this.selectVis}>last</ReactBootstrap.Button>
                 </ReactBootstrap.ButtonGroup>
