@@ -1969,7 +1969,12 @@ class WidgetDs extends React.Component {
         if (!this.state.dsData || this.state.dsData.length == 0) {
             return [];
         }
-        if (utils.isJSON(this.state.dsData[0].content)) {
+        var notAllJSON = this.state.dsData.some( data => {
+            if (!utils.isJSON(data.content)) {
+                return true;
+            }
+        });
+        if (!notAllJSON) {
             var content = this.processJSONContent();
         } else {
             var counter = 0;
@@ -2128,7 +2133,6 @@ class WidgetDs extends React.Component {
                 allObjects = false;
             }
         });
-        headerFields.unshift('date');
         var dsDatapoints = this.state.datapoints;
         var canEdit = true;
         if (this.state.datasourcename.split(':').length > 1) {
@@ -2208,6 +2212,7 @@ class WidgetDs extends React.Component {
         });
         // ahora tenemos que crear la tabla con el json
         if (allObjects) {
+            headerFields.unshift('date');
             console.log('todo objetos',headerFields);
             if (this.state.intLength == 0) {
                 var verticalHeading = true;
@@ -2266,18 +2271,17 @@ class WidgetDs extends React.Component {
             });
             var rows = dsContents.map( (dsContent,i) => {
                 var content = JSON.parse(dsContent.content);
-                var row = content.map( (item,j) => {
+                var contentRows = [];
+                var rowCount = 0;
+                contentRows.push(<tr key={++rowCount}><th colSpan={headerFields.length.toString()}>Date:{' '}{this.generateDateString(dsContent.ts)}</th></tr>);
+                content.forEach( (item,j) => {
                     var rowItems = []
                     headerFields.forEach ( (field,k) => {
-                        if (j==0 && k==0) {
-                            rowItems.push(<td key={k} rowSpan={content.length.toString()}>{this.generateDateString(dsContent.ts)}</td>);
-                        } else if (k!=0){
-                            rowItems.push(<td key={k}>{this.getJSONElements(item[field])}</td>);
-                        }
+                        rowItems.push(<td key={k}>{this.getJSONElements(item[field])}</td>);
                     });
-                    return <tr key={j}>{rowItems}</tr>;
+                    contentRows.push(<tr key={++rowCount}>{rowItems}</tr>);
                 });
-                return row;
+                return contentRows;
             });
             return (
                 <ReactBootstrap.Table condensed hover>
