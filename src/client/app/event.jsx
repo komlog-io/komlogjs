@@ -4,6 +4,7 @@ import PubSub from 'pubsub-js';
 import $ from 'jquery';
 import * as ReactBootstrap from 'react-bootstrap';
 import * as d3 from 'd3';
+import * as utils from './utils.js';
 import {d3SummaryLinegraph, d3SummaryDatasource} from './graphs.jsx';
 import {getEvents, sendEventResponse} from './event-store.js';
 import {topics, styles} from './types.js';
@@ -160,121 +161,235 @@ class EventTypeDatapointIdentification extends React.Component {
         this.setState({selectedVar:selectedVar});
     }
 
-    generateDsContent (content, vars, var_index) {
-        var dsContent = [];
-        if (var_index >= 0) {
-            var var_pos = vars[var_index][0];
-            var var_length = vars[var_index][1];
-            if (content.length >= var_pos+var_length) {
-                dsContent.push({
-                    pos:var_pos,
-                    type:'var',
-                    content:content.substring(var_pos,var_pos+var_length)
-                });
-            }
-            if (content.length > var_pos+var_length) {
-                var lines = content.substring(var_pos+var_length,content.length).split('\n');
-                var start = var_pos+var_length;
-                for (var i=0;i<lines.length;i++) {
-                    if (lines[i].length>0) {
-                        dsContent.push({
-                            pos:start,
-                            type:'text',
-                            content:lines[i].replace(/ /g,'\u00a0')
-                        });
-                        if (i<lines.length-1) {
-                            start += 1;
-                            dsContent.push({
-                                pos:start,
-                                type:'nl'
-                            });
-                        }
-                        start += lines[i].length;
-                    } else {
-                        dsContent.push({
-                            pos:start,
-                            type:'nl'
-                        });
-                        start += 1;
-                    }
-                }
-            }
-            var newContent = content.substring(0,var_pos);
-            var others = this.generateDsContent(newContent,vars, var_index-1);
-            for (var i=0; i<others.length;i++) {
-                dsContent.push(others[i]);
-            }
+    getHtmlContent () {
+        var data = this.props.data.summary.data[this.state.index];
+        if (utils.isJSON(data.content)) {
+            return this.processJSONContent(data);
         } else {
-            var lines = content.split('\n');
-            var start = 0;
-            for (var i=0; i<lines.length;i++) {
-                if (lines[i].length > 0) {
-                    dsContent.push({
-                        pos:start,
-                        type:'text',
-                        content:lines[i].replace(/ /g,'\u00a0')
-                    });
-                    if (i<lines.length-1) {
-                        start += 1;
-                        dsContent.push({
-                            pos:start,
-                            type:'nl'
-                        });
-                    }
-                    start = start + lines[i].length;
-                } else {
-                    dsContent.push({
-                        pos:start,
-                        type:'nl'
-                    });
-                    start += 1;
-                }
-            }
+            return this.processTextContent(data);
         }
-        return dsContent;
     }
 
-    getDSData (index) {
-        var content = this.props.data.summary.data[index].content;
-        var vars = this.props.data.summary.data[index].vars;
-        var ts = this.props.data.summary.data[index].ts;
-        var dateFormat = d3.timeFormat("%Y/%m/%d - %H:%M:%S");
-        var date = new Date(ts*1000);
-        var dateText=dateFormat(date);
-        var dsElements = this.generateDsContent(content,vars, vars.length-1);
-        dsElements.sort( (a,b) => {
-            var x = a.pos;
-            var y = b.pos;
-            return ((x < y) ? -1 : ((x > y) ? 1 : 0));
-        });
-        var reactElements = [];
-        for (var i=0; i< dsElements.length; i++) {
-            if (dsElements[i].type == 'text') {
-                reactElements.push(React.createElement('span',{key:i},dsElements[i].content));
-            } else if (dsElements[i].type == 'var') {
-                if (this.state.index in this.state.selectedVar) {
-                    if (this.state.selectedVar[this.state.index] == null) {
-                        reactElements.push(<span key={i} id={dsElements[i].pos} className="modal-ds-var-negated clickable" onClick={this.selectVar}>{dsElements[i].content}</span>);
-                    } else if (this.state.selectedVar[this.state.index] == dsElements[i].pos) {
-                        reactElements.push(<span key={i} id={dsElements[i].pos} className="modal-ds-var-selected clickable" onClick={this.selectVar}>{dsElements[i].content}</span>);
-                    } else {
-                        reactElements.push(<span key={i} id={dsElements[i].pos} className="modal-ds-var clickable" onClick={this.selectVar}>{dsElements[i].content}</span>);
-                    }
+    processTextContent (dsData) {
+        var elements=[];
+        if (!dsData) {
+            return elements;
+        }
+        var dsVars = dsData.vars;
+        var numElement = 0;
+        var cursorPosition=0;
+        var newLineRegex=/(?:\r\n|\r|\n)/g;
+        var dsSubContent, start, text, match, datapointname, position, length;
+        dsVars.forEach( v => {
+            position=v[0];
+            length=v[1];
+            dsSubContent=dsData.content.substr(cursorPosition,position-cursorPosition);
+            start=0;
+            match = newLineRegex.exec(dsSubContent);
+            while(match != null) {
+                text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
+                elements.push(<span key={numElement++}>{text}</span>);
+                elements.push(<br key={numElement++} />);
+                start=match.index+match.length-1;
+                match = newLineRegex.exec(dsSubContent);
+            }
+            if (start<position) {
+                text=dsSubContent.substr(start,position-start).replace(/ /g, '\u00a0');
+                elements.push(<span key={numElement++}>{text}</span>);
+            }
+            text=dsData.content.substr(position,length);
+            if (this.state.index in this.state.selectedVar) {
+                if (this.state.selectedVar[this.state.index] == null) {
+                    elements.push(<span key={numElement++} id={position} className="modal-ds-var-negated clickable" onClick={this.selectVar}>{text}</span>);
+                } else if (this.state.selectedVar[this.state.index] == position) {
+                    elements.push(<span key={numElement++} id={position} className="modal-ds-var-selected clickable" onClick={this.selectVar}>{text}</span>);
                 } else {
-                    reactElements.push(<span key={i} id={dsElements[i].pos} className="modal-ds-var clickable" onClick={this.selectVar}>{dsElements[i].content}</span>);
+                    elements.push(<span key={numElement++} id={position} className="modal-ds-var clickable" onClick={this.selectVar}>{text}</span>);
                 }
-            } else if (dsElements[i].type == 'nl') {
-                reactElements.push(<br key={i} />);
+            } else {
+                elements.push(<span key={numElement++} id={position} className="modal-ds-var clickable" onClick={this.selectVar}>{text}</span>);
+            }
+            cursorPosition=position+length;
+        });
+        if (cursorPosition<dsData.content.length) {
+            dsSubContent=dsData.content.substr(cursorPosition,dsData.content.length-cursorPosition);
+            start=0;
+            while((match=newLineRegex.exec(dsSubContent)) != null) {
+                text=dsSubContent.substr(start,match.index-start).replace(/ /g, '\u00a0');
+                elements.push(<span key={numElement++}>{text}</span>);
+                elements.push(<br key={numElement++} />);
+                start=match.index+match.length-1;
+            }
+            if (start<dsSubContent.length-1) {
+                text=dsSubContent.substr(start,dsSubContent.length-1-start).replace(/ /g, '\u00a0');
+                elements.push(<span key={numElement++}>{text}</span>);
             }
         }
-        return (
-          <div className="modal-ds-body">
-            <h4>({this.state.index+1}/{this.state.numSlides}) Sample at {dateText}</h4>
-            <div className="modal-ds-content">
-              {reactElements}
-            </div>
-          </div>
-        );
+        return elements;
+    }
+
+    processJSONContent (dsData) {
+        var elements=[];
+        if (!dsData) {
+            return elements;
+        }
+        var dsVars = dsData.vars;
+        var numElement = 0;
+        var cursorPosition=0;
+        var newContent = ''
+        var dsSubContent, start, text, match, datapointname, position, length;
+        dsVars.forEach( v => {
+            position=v[0];
+            length=v[1];
+            newContent+=dsData.content.substr(cursorPosition,position-cursorPosition);
+            text=dsData.content.substr(position,length);
+            var res = utils.inJSONString(dsData.content, position)
+            if (res) {
+                var newEl = "/*_k_type/var/"+text+"/"+position+"/"+length+"*/"
+            } else {
+                var newEl = JSON.stringify({_k_type:'var', text:text, position:position, length:length});
+            }
+            newContent+= newEl;
+            cursorPosition=position+length;
+        });
+        if (cursorPosition<dsData.content.length) {
+            newContent+=dsData.content.substr(cursorPosition,dsData.content.length-cursorPosition);
+        }
+        // ahora tenemos que crear la tabla con el json
+        var content = JSON.parse(newContent);
+        var json_elements = this.getJSONElements(content);
+        return json_elements;
+    }
+
+    getJSONElements (obj) {
+        var objType = Object.prototype.toString.apply(obj)
+        if (objType == '[object Object]' && obj.hasOwnProperty('_k_type')) {
+            if (obj._k_type == 'var') {
+                if (this.state.index in this.state.selectedVar) {
+                    if (this.state.selectedVar[this.state.index] == null) {
+                        return <span id={obj.position} className="modal-ds-var-negated clickable" onClick={this.selectVar}>{obj.text}</span>;
+                    } else if (this.state.selectedVar[this.state.index] == obj.position) {
+                        return <span id={obj.position} className="modal-ds-var-selected clickable" onClick={this.selectVar}>{obj.text}</span>;
+                    } else {
+                        return <span id={obj.position} className="modal-ds-var clickable" onClick={this.selectVar}>{obj.text}</span>;
+                    }
+                } else {
+                    return <span id={obj.position} className="modal-ds-var clickable" onClick={this.selectVar}>{obj.text}</span>;
+                }
+            }
+        } else if (objType == '[object Object]') {
+            var keys = Object.keys(obj);
+            var rows = keys.map( (key,i) => {
+                return <tr key={i}><th>{key}</th><td>{this.getJSONElements(obj[key])}</td></tr>;
+            });
+            return (
+              <ReactBootstrap.Table responsive>
+                <tbody>
+                  {rows}
+                </tbody>
+              </ReactBootstrap.Table>
+            );
+        } else if (objType == '[object Array]') {
+            var tabItems = [];
+            var otherItems = [];
+            obj.forEach( item => {
+                var itemType = Object.prototype.toString.apply(item)
+                if (itemType == '[object Object]' && !item.hasOwnProperty('_k_type')) {
+                    tabItems.push(item);
+                } else {
+                    otherItems.push(item);
+                }
+            });
+            if (otherItems.length > 0) {
+                if (tabItems.length > 0) {
+                    otherItems.push(tabItems);
+                }
+                var rows = otherItems.map( (item,i) => {
+                    return <tr key={i}>{this.getJSONElements(item)}</tr>
+                });
+                return (
+                  <ReactBootstrap.Table responsive>
+                    <tbody>
+                      {rows}
+                    </tbody>
+                  </ReactBootstrap.Table>
+                );
+            } else if (tabItems.length > 0) {
+                var keys = []
+                tabItems.forEach( item => {
+                    var itemKeys = Object.keys(item);
+                    itemKeys.forEach( itemKey => {
+                        if (keys.indexOf(itemKey) == -1) {
+                            keys.push(itemKey)
+                        }
+                    });
+                });
+                var theader = keys.map ( (key,i) => {
+                    return <th key={i}>{key}</th>
+                });
+                var rows = tabItems.map ( (item,i) => {
+                    var row = keys.map ( (key,j) => {
+                        return <td key={j}>{this.getJSONElements(item[key])}</td>
+                    });
+                    return <tr key={i}>{row}</tr>
+                });
+                return (
+                  <ReactBootstrap.Table responsive>
+                    <thead>
+                      <tr>
+                        {theader}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows}
+                    </tbody>
+                  </ReactBootstrap.Table>
+                );
+            } else {
+                return <div />;
+            }
+        } else if (objType == '[object String]') {
+            var matches = obj.match(/\/\*_k_type.*?\*\//gm)
+            if (matches) {
+                var result = [];
+                var text = obj;
+                var child = 0;
+                matches.forEach( match => {
+                    var texts = text.split(match,2)
+                    if (texts[0].length > 0) {
+                        result.push(<span key={child++}>{texts[0]}</span>)
+                    }
+                    var params = match.split('/*_k_type')[1].split('*/')[0].split('/')
+                    if (params[1] == "var") {
+                        var position = parseInt(params[3]);
+                        var length = parseInt(params[4]);
+                        var value = params[2];
+                        if (this.state.index in this.state.selectedVar) {
+                            if (this.state.selectedVar[this.state.index] == null) {
+                                result.push(<span key={child++} id={position} className="modal-ds-var-negated clickable" onClick={this.selectVar}>{value}</span>);
+                            } else if (this.state.selectedVar[this.state.index] == position) {
+                                result.push(<span key={child++} id={position} className="modal-ds-var-selected clickable" onClick={this.selectVar}>{value}</span>);
+                            } else {
+                                result.push(<span key={child++} id={position} className="modal-ds-var clickable" onClick={this.selectVar}>{value}</span>);
+                            }
+                        } else {
+                            result.push(<span key={child++} id={position} className="modal-ds-var clickable" onClick={this.selectVar}>{value}</span>);
+                        }
+                    } else {
+                        result.push(<span key={child++}>{match}</span>);
+                    }
+                    text = texts[1];
+                });
+                if (text.length > 0) {
+                    result.push(<span key={child++}>{text}</span>);
+                }
+                return <div>{result}</div>;
+            } else {
+                return <div>{String(obj)}</div>
+            }
+        } else {
+            return <div>{String(obj)}</div>
+        }
     }
 
     render () {
@@ -289,7 +404,7 @@ class EventTypeDatapointIdentification extends React.Component {
             } else {
                 var nextButtonText = "Send response";
             }
-            var dsData = this.getDSData(this.state.index);
+            var dsData = this.getHtmlContent();
             var infoModal = (
               <ReactBootstrap.Modal show={this.state.showModal} onHide={this.closeModal}>
                 <ReactBootstrap.Modal.Header closeButton={true}>
