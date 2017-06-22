@@ -3806,6 +3806,12 @@ class WidgetDsVariable extends React.Component {
         }
     }
 
+    componentWillReceiveProps (nextProps) {
+        if (this.popover.state.show == true && this.props.seq != nextProps.seq) {
+            this.popover.hide();
+        }
+    }
+
     render () {
         var popover = (
           <ReactBootstrap.Popover id="datapoint" title="Identify Datapoint">
