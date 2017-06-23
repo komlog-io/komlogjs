@@ -194,7 +194,7 @@ class Dashboard extends React.Component {
         }
         return (
           <div className="workspace modal-container" style={{display:display}}>
-            <DashboardGrid children={slides} />
+            <DashboardGrid active={this.props.active} children={slides} />
           </div>
         );
     }
@@ -325,6 +325,8 @@ class DashboardGrid extends React.Component {
         colDim: {}
     };
 
+    subscriptionTokens = [];
+
     componentDidMount () {
         var width=ReactDOM.findDOMNode(this).offsetWidth;
         var height=ReactDOM.findDOMNode(this).offsetHeight;
@@ -335,6 +337,18 @@ class DashboardGrid extends React.Component {
         for (var i = 0; i<columns; i++) {
             colDim[i]={x:i*cellWidth,y:0}
         }
+
+        var subscribedTopics = [
+            topics.GRID_REFRESH_REQUEST,
+        ];
+
+        this.subscriptionTokens = subscribedTopics.map( topic => {
+            return {
+                token:PubSub.subscribe(topic,this.subscriptionHandler),
+                msg:topic
+            }
+        });
+
         this.setState({loading:false, cellWidth:cellWidth, columns: columns, colDim:colDim})
     }
 
@@ -349,6 +363,8 @@ class DashboardGrid extends React.Component {
             var curY = this.refs[lid].offsetTop;
             var curWidth = this.refs[lid].offsetWidth;
             var curHeight = this.refs[lid].offsetHeight;
+            const domNode = ReactDOM.findDOMNode(this.refs[lid]);
+            const boundingBox = domNode.getBoundingClientRect();
             if (cells.hasOwnProperty(lid)) {
                 var curCell = cells[lid];
                 if (curCell.x != curX || curCell.y != curY || curCell.width != curWidth || curCell.height != curHeight ) {
@@ -441,6 +457,20 @@ class DashboardGrid extends React.Component {
 
         if (shouldUpdate) {
             this.setState({cells:cells, colDim:colDim});
+        }
+    }
+
+    subscriptionHandler = (msg,data) => {
+        switch(msg){
+            case topics.GRID_REFRESH_REQUEST:
+                this.refreshGrid();
+                break;
+        }
+    }
+
+    refreshGrid () {
+        if (this.props.active) {
+            this.componentDidUpdate();
         }
     }
 

@@ -333,6 +333,10 @@ class WidgetConfigDs extends React.Component {
         });
     }
 
+    collapseUpdate = () => {
+        PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
+    }
+
     subscriptionHandler = (msg,data) => {
         switch (msg) {
             case topics.DATASOURCE_CONFIG_UPDATE(this.state.did):
@@ -941,7 +945,7 @@ class WidgetConfigDs extends React.Component {
           </ReactBootstrap.Modal>
         );
         return (
-          <ReactBootstrap.Collapse in={this.props.showConfig}>
+          <ReactBootstrap.Collapse in={this.props.showConfig} onEntered={this.collapseUpdate} onExited={this.collapseUpdate}>
             <div>
               <ReactBootstrap.Well>
                 <ReactBootstrap.Panel>
@@ -1037,6 +1041,10 @@ class WidgetConfigDp extends React.Component {
         }
     }
 
+    collapseUpdate = () => {
+        PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
+    }
+
     handleChange = (e) => {
         var color = e.target.value;
         var isOk = /^#[0-9A-F]{6}$/i.test(color);
@@ -1125,7 +1133,7 @@ class WidgetConfigDp extends React.Component {
         );
         var boxColor=<ReactBootstrap.Glyphicon glyph="unchecked" style={{backgroundColor:this.state.boxColor, color:this.state.boxColor}} />
         return (
-          <ReactBootstrap.Collapse in={this.props.showConfig}>
+          <ReactBootstrap.Collapse in={this.props.showConfig} onEntered={this.collapseUpdate} onExited={this.collapseUpdate}>
             <div>
               <ReactBootstrap.Well>
                 <ReactBootstrap.Panel>
@@ -1246,6 +1254,10 @@ class WidgetConfigMp extends React.Component {
                 this.refreshConfig();
                 break;
         }
+    }
+
+    collapseUpdate = () => {
+        PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
     }
 
     async refreshConfig () {
@@ -1439,7 +1451,7 @@ class WidgetConfigMp extends React.Component {
         );
         var datapointList=this.renderDatapointList();
         return (
-          <ReactBootstrap.Collapse in={this.props.showConfig}>
+          <ReactBootstrap.Collapse in={this.props.showConfig} onEntered={this.collapseUpdate} onExited={this.collapseUpdate}>
             <div>
               <ReactBootstrap.Well>
                 <ReactBootstrap.Panel>
@@ -1503,6 +1515,7 @@ class WidgetDs extends React.Component {
     };
 
     subscriptionTokens = [];
+    boundingClientRect = null;
 
     async initialization () {
         var newState = {};
@@ -1608,6 +1621,20 @@ class WidgetDs extends React.Component {
         } else if (nextProps.downloadCounter>this.state.downloadCounter) {
             this.downloadContent();
             this.setState({downloadCounter:nextProps.downloadCounter});
+        }
+    }
+
+    componentDidUpdate () {
+        const domNode = ReactDOM.findDOMNode(this);
+        const boundingBox = domNode.getBoundingClientRect();
+        if (!this.boundingClientRect) {
+            this.boundingClientRect = boundingBox;
+            PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
+        } else if (this.boundingClientRect.height != boundingBox.height ) {
+            this.boundingClientRect = boundingBox;
+            PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
+        } else {
+            this.boundingClientRect = boundingBox;
         }
     }
 
@@ -2776,6 +2803,7 @@ class WidgetDp extends React.Component {
     };
 
     subscriptionTokens = [];
+    boundingClientRect = null;
 
     async initialization () {
         var config = await getWidgetConfig(this.props.wid);
@@ -2838,6 +2866,20 @@ class WidgetDp extends React.Component {
         } else if (nextProps.downloadCounter>this.state.downloadCounter) {
             this.downloadContent();
             this.setState({downloadCounter:nextProps.downloadCounter});
+        }
+    }
+
+    componentDidUpdate () {
+        const domNode = ReactDOM.findDOMNode(this);
+        const boundingBox = domNode.getBoundingClientRect();
+        if (!this.boundingClientRect) {
+            this.boundingClientRect = boundingBox;
+            PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
+        } else if (this.boundingClientRect.height != boundingBox.height ) {
+            this.boundingClientRect = boundingBox;
+            PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
+        } else {
+            this.boundingClientRect = boundingBox;
         }
     }
 
@@ -3099,6 +3141,7 @@ class WidgetMp extends React.Component {
     };
 
     subscriptionTokens = [];
+    boundingClientRect = null;
 
     async initialization () {
         var newState = {};
@@ -3196,6 +3239,20 @@ class WidgetMp extends React.Component {
         } else if (nextProps.downloadCounter>this.state.downloadCounter) {
             this.downloadContent();
             this.setState({downloadCounter:nextProps.downloadCounter});
+        }
+    }
+
+    componentDidUpdate () {
+        const domNode = ReactDOM.findDOMNode(this);
+        const boundingBox = domNode.getBoundingClientRect();
+        if (!this.boundingClientRect) {
+            this.boundingClientRect = boundingBox;
+            PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
+        } else if (this.boundingClientRect.height != boundingBox.height ) {
+            this.boundingClientRect = boundingBox;
+            PubSub.publish(topics.GRID_REFRESH_REQUEST,{});
+        } else {
+            this.boundingClientRect = boundingBox;
         }
     }
 
