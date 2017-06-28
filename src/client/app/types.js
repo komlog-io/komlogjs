@@ -54,6 +54,7 @@ const topics = {
     DELETE_EVENT:'deleteEvent',
     DELETE_SNAPSHOT:'deleteSnapshot',
     DELETE_WIDGET:'deleteWidget',
+    FOCUS_SLIDE: 'focusSlide',
     GRID_REFRESH_REQUEST:'gridRefreshRequest',
     LOAD_SLIDE:'loadSlide',
     LOAD_DATAPOINT_SLIDE:'loadDatapointSlide',

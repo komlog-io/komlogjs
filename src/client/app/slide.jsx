@@ -20,7 +20,7 @@ window.loadSlide = (data) => {
 class Slide extends React.Component {
     state = {
         conf: {},
-        shareCounter: 0
+        shareCounter: 0,
     };
 
     closeCallback = () => {
@@ -43,8 +43,9 @@ class Slide extends React.Component {
 
     render () {
         var slide = this.getSlideEl();
+        var className = this.props.focus ? 'Slide blink modal-container':'Slide modal-container';
         return (
-          <div className='Slide modal-container'>
+          <div className={className}>
             {slide}
           </div>
         );

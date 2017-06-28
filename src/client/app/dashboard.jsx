@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import PubSub from 'pubsub-js';
+import $ from 'jquery';
 import {Glyphicon, Collapse, ListGroup, ListGroupItem, Button, Well, Input, Modal} from 'react-bootstrap';
 import {getDashboardConfig} from './dashboard-store.js';
 import {Slide} from './slide.jsx';
@@ -134,9 +135,27 @@ class Dashboard extends React.Component {
         }
     }
 
+    focusSlide (lid, start) {
+        var slides = this.state.slides;
+        var slide = slides.find( slide => slide.lid == lid);
+        if (slide) {
+            if (start) {
+                console.log('iniciando focus');
+                PubSub.publish(topics.FOCUS_SLIDE, {lid:lid});
+                slide.focus = true;
+                setTimeout( () => {
+                    this.focusSlide(lid, false);
+                }, 2500);
+            } else {
+                console.log('terminando focus');
+                slide.focus = false;
+            }
+            this.setState({slides:slides});
+        }
+    }
+
     loadSlide (data) {
         if (this.props.active == true) {
-            var slideExists=false;
             if (data.hasOwnProperty('wid')) {
                 var lid = data.wid;
                 var type = 'wid';
@@ -156,25 +175,27 @@ class Dashboard extends React.Component {
                 return;
             }
             var tid=data.tid;
-            var slideExists = this.state.slides.some( slide => slide.lid == lid);
-            if (!slideExists && lid) {
+            var slide = this.state.slides.find( slide => slide.lid == lid);
+            if (!slide) {
                 if (type=='wid' && this.state.wids.indexOf(lid)>-1) {
                     var isPinned=true;
                 } else {
                     var isPinned=false;
                 }
-                var slide={lid:lid,tid:tid,type:type,isPinned:isPinned};
+                var slide={lid:lid,tid:tid,type:type,isPinned:isPinned,focus:false};
                 var new_slides=this.state.slides;
                 new_slides.push(slide);
                 PubSub.publish(topics.NEW_SLIDE_LOADED,{slide:slide});
                 this.setState({slides:new_slides});
+            } else {
+                this.focusSlide(lid, true);
             }
         }
     }
 
     getSlideList () {
         return this.state.slides.map( slide =>
-            <Slide key={slide.lid} bid={this.props.bid} lid={slide.lid} tid={slide.tid} type={slide.type} isPinned={slide.isPinned} />
+            <Slide key={slide.lid} bid={this.props.bid} lid={slide.lid} tid={slide.tid} type={slide.type} isPinned={slide.isPinned} focus={slide.focus} />
         );
     }
 
@@ -330,7 +351,7 @@ class DashboardGrid extends React.Component {
     componentDidMount () {
         var width=ReactDOM.findDOMNode(this).offsetWidth;
         var height=ReactDOM.findDOMNode(this).offsetHeight;
-        var minCellWidth = 445;
+        var minCellWidth = 600;
         var columns = parseInt(width / minCellWidth);
         var cellWidth= parseInt(width / columns);
         var colDim={};
@@ -340,6 +361,7 @@ class DashboardGrid extends React.Component {
 
         var subscribedTopics = [
             topics.GRID_REFRESH_REQUEST,
+            topics.FOCUS_SLIDE,
         ];
 
         this.subscriptionTokens = subscribedTopics.map( topic => {
@@ -349,7 +371,18 @@ class DashboardGrid extends React.Component {
             }
         });
 
-        this.setState({loading:false, cellWidth:cellWidth, columns: columns, colDim:colDim})
+        this.setState({
+            loading:false,
+            cellWidth:cellWidth,
+            columns: columns,
+            colDim:colDim,
+        });
+    }
+
+    componentWillUnmount () {
+        this.subscriptionTokens.forEach( d => {
+            PubSub.unsubscribe(d.token);
+        });
     }
 
     componentDidUpdate () {
@@ -465,6 +498,15 @@ class DashboardGrid extends React.Component {
             case topics.GRID_REFRESH_REQUEST:
                 this.refreshGrid();
                 break;
+            case topics.FOCUS_SLIDE:
+                this.focusSlide(data);
+        }
+    }
+
+    focusSlide (data) {
+        if (this.props.active && data.hasOwnProperty('lid') && this.state.cells.hasOwnProperty(data.lid)) {
+            var main = $("#workspace-content");
+            main.animate({ scrollTop: this.state.cells[data.lid].y-100 }, 600);
         }
     }
 
