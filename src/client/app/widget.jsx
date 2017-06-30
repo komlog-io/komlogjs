@@ -2300,7 +2300,7 @@ class WidgetDs extends React.Component {
                 var content = JSON.parse(dsContent.content);
                 var contentRows = [];
                 var rowCount = 0;
-                contentRows.push(<tr key={++rowCount}><th colSpan={headerFields.length.toString()}>Date:{' '}{this.generateDateString(dsContent.ts)}</th></tr>);
+                contentRows.push(<tr key={++rowCount}><th colSpan={headerFields.length.toString()}>{this.generateDateString(dsContent.ts)}</th></tr>);
                 content.forEach( (item,j) => {
                     var rowItems = []
                     headerFields.forEach ( (field,k) => {
