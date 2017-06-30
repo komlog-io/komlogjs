@@ -505,6 +505,7 @@ a {
 
 .datapoint-table {
   overflow-x: scroll;
+  max-height: 400px;
 }
 
 .color-tag {

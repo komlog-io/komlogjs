@@ -1,4 +1,5 @@
 import * as d3 from 'd3';
+import * as utils from './utils.js';
 
 d3.selection.prototype.moveToFront = function() {
     return this.each(function () {
@@ -1076,6 +1077,103 @@ let d3Histogram = {
     }
 }
 
+let d3Table = {
+    create: function (el, data) {
+        var table = d3.select(el).append("table")
+            .attr("class", "table table-condensed table-hover");
+        table.append("thead").append("tr");
+        table.append("tbody");
+
+        this.update(el, data);
+    },
+
+    update: function (el, data) {
+        console.log('Datos tabla',data);
+        var dateFormat = d3.timeFormat("%Y/%m/%d\u00A0-\u00A0%H:%M:%S");
+        var columns=data.map( e => e.pid);
+        var literals={'date':{short:''}};
+        var tableData=[];
+        columns.sort();
+        columns.unshift('date');
+        var dpNames = data.map(el => el.datapointname);
+        var headerNames = utils.literalShortener(dpNames);
+        if (headerNames) {
+            data.forEach( el => {
+                literals[el.pid]={'short':headerNames[el.datapointname],'title':el.datapointname};
+            });
+        } else {
+            data.forEach( el => {
+                literals[el.pid]={'short':el.datapointname};
+            });
+        }
+        for (var i=0;i<data.length;i++) {
+            for (var j=0;j<data[i].data.length;j++) {
+                var tsData=tableData.find( el => el.ts == data[i].data[j].ts);
+                if (!tsData) {
+                    var tsObj={};
+                    tsObj.ts=data[i].data[j].ts;
+                    tsObj.date=dateFormat(new Date(tsObj.ts*1000));
+                    tsObj[data[i].pid]=data[i].data[j].value;
+                    tableData.push(tsObj);
+                } else {
+                    tsData[data[i].pid]=data[i].data[j].value;
+                }
+            }
+        }
+        tableData.sort( (a,b) => b.ts-a.ts);
+        var table = d3.select(el).select("table"),
+            tbody = table.select("tbody");
+        // append the header row
+        var thead = table.select('thead').select("tr")
+            .selectAll("th")
+            .data(columns);
+        thead.enter()
+            .append("th")
+            .attr("class", (column,i) => {if (columns.length > 2 && i>0) {return 'text-right'}})
+            .attr("title", column => literals[column].title)
+            .text(column => literals[column].short);
+        // create a row for each object in the data
+        var rows = tbody.selectAll("tr")
+            .data(tableData, d => d.ts);
+        rows.enter()
+            .append("tr");
+        rows.exit().remove();
+        var rows = tbody.selectAll("tr")
+            .data(tableData, d => d.ts);
+        // create a cell in each row for each column
+        var cells = rows.selectAll("td")
+            .data(function(row) {
+                return columns.map( function(column,i) {
+                    if (i>0) {
+                        if (row[column] !== undefined) {
+                            var value = d3.format(',')(row[column]);
+                        } else {
+                            var value = undefined;
+                        }
+                        if (columns.length > 2) {
+                            return {column: column, value: value, class:'text-right'};
+                        } else {
+                            return {column: column, value: value};
+                        }
+                    } else {
+                        return {column: column, value: row[column]};
+                    }
+                });
+            });
+        cells.enter()
+            .append("td")
+            .attr("class", d => d.class)
+            .text(d => d.value);
+        console.log('cells',cells);
+        cells.transition()
+            .duration(300)
+            .text(d => d.value);
+        console.log('llego al final');
+        cells.exit().remove();
+        thead.exit().remove();
+    }
+}
+
 let d3SummaryLinegraph = {
     create: function (el, datapoints, its, ets) {
         var y_values_array=[];
@@ -1645,6 +1743,7 @@ export {
     d3TimeSlider,
     d3Linegraph,
     d3Histogram,
+    d3Table,
     d3SummaryLinegraph,
     d3SummaryDatasource
 }

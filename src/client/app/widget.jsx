@@ -8,7 +8,7 @@ import {getWidgetConfig} from './widget-store.js';
 import {getDatasourceConfig, getDatasourceData, getDatasourceDataAt} from './datasource-store.js';
 import {getDatapointConfig, getDatapointData, getDatapointTAxis} from './datapoint-store.js';
 import {getNodeInfoByUri} from './uri-store.js';
-import {d3TimeSlider, d3Linegraph, d3Histogram} from './graphs.jsx';
+import {d3TimeSlider, d3Linegraph, d3Histogram, d3Table} from './graphs.jsx';
 import {topics, styles} from './types.js';
 
 class Widget extends React.Component {
@@ -3101,8 +3101,15 @@ class WidgetDp extends React.Component {
             </ReactBootstrap.Modal.Footer>
           </ReactBootstrap.Modal>
         );
-        var visContent=this.state.activeVis == 0 ?  <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} /> : 
-            this.state.activeVis == 1 ? <ContentHistogram data={data} /> : null;
+        if (this.state.activeVis == 0) {
+            var visContent = <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} />;
+        } else if (this.state.activeVis == 1) {
+            var visContent = <ContentHistogram data={data} />;
+        } else if (this.state.activeVis == 2) {
+            var visContent = <ContentTable data={data} />;
+        } else {
+            var visContent = null;
+        }
         return (
           <div>
             <div className="dp-stats">
@@ -3113,6 +3120,7 @@ class WidgetDp extends React.Component {
                 <ReactBootstrap.ButtonGroup bsSize="xsmall">
                   <ReactBootstrap.Button id="0" active={this.state.activeVis == 0 ? true : false} onClick={this.selectVis}>chart</ReactBootstrap.Button>
                   <ReactBootstrap.Button id="1" active={this.state.activeVis == 1 ? true : false} onClick={this.selectVis}>histogram</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="2" active={this.state.activeVis == 2 ? true : false} onClick={this.selectVis}>table</ReactBootstrap.Button>
                 </ReactBootstrap.ButtonGroup>
               </div>
               <div className="col-sm-7">
@@ -3627,7 +3635,6 @@ class WidgetMp extends React.Component {
               </div>
             );
         }
-        var summary = this.getDataSummary();
         var data=Object.keys(this.state.config).map( pid => {
             return {
                 pid:pid,
@@ -3650,8 +3657,19 @@ class WidgetMp extends React.Component {
             </ReactBootstrap.Modal.Footer>
           </ReactBootstrap.Modal>
         );
-        var visContent=this.state.activeVis == 0 ?  <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} /> : 
-            this.state.activeVis == 1 ? <ContentHistogram data={data} /> : null;
+        if (this.state.activeVis == 0) {
+            var summary = this.getDataSummary();
+            var visContent = <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} />;
+        } else if (this.state.activeVis == 1) {
+            var summary = this.getDataSummary();
+            var visContent = <ContentHistogram data={data} />;
+        } else if (this.state.activeVis == 2) {
+            var summary = null;
+            var visContent = <ContentTable data={data} />;
+        } else {
+            var summary = null;
+            var visContent = null;
+        }
         return (
           <div onDrop={this.onDrop} onDragEnter={this.onDragEnter} onDragOver={this.onDragOver}>
             <div className="dp-stats">
@@ -3662,6 +3680,7 @@ class WidgetMp extends React.Component {
                 <ReactBootstrap.ButtonGroup bsSize="xsmall">
                   <ReactBootstrap.Button id="0" active={this.state.activeVis == 0 ? true : false} onClick={this.selectVis}>chart</ReactBootstrap.Button>
                   <ReactBootstrap.Button id="1" active={this.state.activeVis == 1 ? true : false} onClick={this.selectVis}>histogram</ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="2" active={this.state.activeVis == 2 ? true : false} onClick={this.selectVis}>table</ReactBootstrap.Button>
                 </ReactBootstrap.ButtonGroup>
               </div>
               <div className="col-sm-7">
@@ -3846,7 +3865,7 @@ class ContentTable extends React.Component {
     }
 
     render () {
-        return <div />;
+        return <div className="datapoint-table" />;
     }
 }
 
@@ -3917,6 +3936,7 @@ export {
     Widget,
     TimeSlider,
     ContentLinegraph,
-    ContentHistogram
+    ContentHistogram,
+    ContentTable
 }
 

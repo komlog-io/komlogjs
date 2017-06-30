@@ -6,7 +6,7 @@ import * as utils from './utils.js';
 import {getSnapshotConfig} from './snapshot-store.js';
 import {getDatasourceConfig, getDatasourceData} from './datasource-store.js';
 import {getDataSummary, getDatapointData} from './datapoint-store.js';
-import {TimeSlider, ContentLinegraph, ContentHistogram} from './widget.jsx';
+import {TimeSlider, ContentLinegraph, ContentHistogram, ContentTable} from './widget.jsx';
 import {topics, styles} from './types.js';
 
 
@@ -749,8 +749,15 @@ class SnapshotDp extends React.Component {
             datapointname:this.props.datapoint.datapointname,
             data:this.state.data
         }];
-        var visContent=this.state.activeVis == 0 ?  <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} /> :
-            this.state.activeVis == 1 ? <ContentHistogram data={data} /> : null;
+        if (this.state.activeVis == 0) {
+            var visContent=<ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} />;
+        } else if (this.state.activeVis == 1) {
+            var visContent = <ContentHistogram data={data} />;
+        } else if (this.state.activeVis == 2) {
+            var visContent = <ContentTable data={data} />;
+        } else {
+            var visContent = null;
+        }
         return (
           <div>
             <div className="dp-stats">
@@ -764,6 +771,9 @@ class SnapshotDp extends React.Component {
                   </ReactBootstrap.Button>
                   <ReactBootstrap.Button id="1" active={this.state.activeVis == 1 ? true : false} onClick={this.selectVis}>
                     histogram
+                  </ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="2" active={this.state.activeVis == 2 ? true : false} onClick={this.selectVis}>
+                    table
                   </ReactBootstrap.Button>
                 </ReactBootstrap.ButtonGroup>
               </div>
@@ -1046,7 +1056,6 @@ class SnapshotMp extends React.Component {
               </div>
             );
         }
-        var summary = this.getDataSummary();
         var data=this.props.datapoints.map( (dp,i) => {
             return {
                 pid:dp.pid,
@@ -1055,8 +1064,19 @@ class SnapshotMp extends React.Component {
                 data:this.state.data[dp.pid]
             };
         });
-        var visContent=this.state.activeVis == 0 ? <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} /> :
-            this.state.activeVis == 1 ? <ContentHistogram data={data} /> : null;
+        if (this.state.activeVis == 0) {
+            var summary = this.getDataSummary();
+            var visContent = <ContentLinegraph interval={this.state.interval} data={data} newIntervalCallback={this.newIntervalCallback} />;
+        } else if (this.state.activeVis == 1) {
+            var summary = this.getDataSummary();
+            var visContent = <ContentHistogram data={data} />;
+        } else if (this.state.activeVis == 2) {
+            var summary = null;
+            var visContent = <ContentTable data={data} />;
+        } else {
+            var summary = null;
+            var visContent = null;
+        }
         return (
           <div>
             <div className="dp-stats">
@@ -1070,6 +1090,9 @@ class SnapshotMp extends React.Component {
                   </ReactBootstrap.Button>
                   <ReactBootstrap.Button id="1" active={this.state.activeVis == 1 ? true : false} onClick={this.selectVis}>
                     histogram
+                  </ReactBootstrap.Button>
+                  <ReactBootstrap.Button id="2" active={this.state.activeVis == 2 ? true : false} onClick={this.selectVis}>
+                    table
                   </ReactBootstrap.Button>
                 </ReactBootstrap.ButtonGroup>
               </div>

@@ -42,9 +42,56 @@ function inJSONString(str, pos) {
     return (count % 2? true : false);
 }
 
+function literalShortener(literals) {
+    var objType = Object.prototype.toString.apply(literals)
+    if (objType != '[object Array]' || literals.length < 2) {
+        return null;
+    }
+    var splited = {}
+    literals.forEach ( literal => {
+        splited[literal] = literal.split('.');
+    });
+    for (var i=0,j=splited[literals[0]].length;i<j;i++) {
+        var field = splited[literals[0]][i];
+        var remove = Object.keys(splited).every(literal => {
+            if (splited[literal].length > i+1 && splited[literal][i] == field) {
+                return true;
+            } else {
+                return false;
+            }
+        });
+        if (remove) {
+            Object.keys(splited).forEach( literal => splited[literal].splice(i,1));
+            i--;
+        } else {
+            break;
+        }
+    }
+    for (var i=splited[literals[0]].length-1,j=0;i>=j;i--) {
+        var field = splited[literals[0]][i];
+        var remove = Object.keys(splited).every(literal => {
+            if (splited[literal].length > 1 && splited[literal][i] == field) {
+                return true;
+            } else {
+                return false;
+            }
+        });
+        if (remove) {
+            Object.keys(splited).forEach( literal => splited[literal].splice(i,1));
+        } else {
+            break;
+        }
+    }
+    Object.keys(splited).forEach ( literal => {
+        splited[literal]=splited[literal].join('.');
+    });
+    return splited;
+}
+
 export {
     downloadFile,
     getCookie,
     isJSON,
     inJSONString,
+    literalShortener,
 }
