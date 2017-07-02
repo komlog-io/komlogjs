@@ -1311,6 +1311,9 @@ let d3SummaryLinegraph = {
             var nameLength=d3.max(datapoints, d => d.datapointname ? d.datapointname.length*8 : 0);
             var numDatapoints=datapoints.length;
             if (nameLength) {
+                var dpNames = datapoints.map(d => d.datapointname);
+                var summaryNames = utils.literalShortener(dpNames);
+                var nameLength=d3.max(dpNames, d => summaryNames[d] ? summaryNames[d].length*8 : 0);
                 var rectWidth=12;
                 if (nameLength > width/2 - rectWidth) {
                     nameLength = width/2 - rectWidth;
@@ -1324,7 +1327,7 @@ let d3SummaryLinegraph = {
                 captionBox.append("rect")
                     .attr("x", rectX + 10)
                     .attr("y", 10 )
-                    .attr("width", width / 2 + 25)
+                    .attr("width", nameLength + 25)
                     .attr("height", numDatapoints * 20 + 15)
                     .attr("rx", 5)
                     .attr("ry", 5)
@@ -1352,14 +1355,7 @@ let d3SummaryLinegraph = {
                     .attr('dy','0.71em')
                     .attr('text-anchor','start')
                     .style('fill','#444')
-                    .text( d => {
-                        var name = d.datapointname.slice(-numChars);
-                        if (name.length == numChars) {
-                            name = "..." + name;
-                        }
-                        return name;
-                    });
-
+                    .text( d => summaryNames[d.datapointname].slice(-numChars));
             }
         }
 

@@ -981,9 +981,11 @@ class SnapshotMp extends React.Component {
 
     getDataSummary () {
         var dps = this.props.datapoints;
+        var dpNames = dps.map(dp => dp.datapointname);
+        var summaryNames = utils.literalShortener(dpNames);
         var summary = dps.map( (dp,i) => {
             var color = dp.color;
-            var datapointname = dp.datapointname;
+            var datapointname = summaryNames[dp.datapointname];
             datapointname = datapointname.slice(-20);
             if (datapointname.length == 20) {
                 datapointname = "..."+datapointname;

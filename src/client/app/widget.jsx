@@ -3524,9 +3524,11 @@ class WidgetMp extends React.Component {
 
     getDataSummary () {
         var pids = Object.keys(this.state.config);
+        var dpNames = pids.map(pid => this.state.config[pid].datapointname);
+        var summaryNames = utils.literalShortener(dpNames);
         var summary = pids.map( (pid,i) => {
             var color = this.state.config[pid].color;
-            var datapointname = this.state.config[pid].datapointname;
+            var datapointname = summaryNames[this.state.config[pid].datapointname];
             datapointname = datapointname.slice(-20);
             if (datapointname.length == 20) {
                 datapointname = "..."+datapointname;
