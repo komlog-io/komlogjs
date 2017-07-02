@@ -1509,9 +1509,9 @@ class WidgetDs extends React.Component {
         downloadCounter:this.props.downloadCounter,
         activeVis:0,
         interval: null,
-        hasFilters: false,
-        filtersAvailable: null,
-        filtersApplied: [],
+        hasTags: false,
+        tagsAvailable: null,
+        tagsApplied: [],
     };
 
     subscriptionTokens = [];
@@ -1592,16 +1592,16 @@ class WidgetDs extends React.Component {
             })
             .catch( () => {console.log('failed looking up anomaly signal',anomUri)});
 
-            var filtersUri = values[0].datasourcename+'._filters';
-            var filtersNode = getNodeInfoByUri(filtersUri);
-            filtersNode.then( (val) => {
+            var tagsUri = values[0].datasourcename+'._tags';
+            var tagsNode = getNodeInfoByUri(tagsUri);
+            tagsNode.then( (val) => {
                 if (val && val.hasOwnProperty('children') && val.children.length > 0) {
-                    this.setState({hasFilters:true});
+                    this.setState({hasTags:true});
                 } else {
-                    console.log('No filters signal');
+                    console.log('No tags signal');
                 }
             })
-            .catch( () => {console.log('failed looking up filters signal',filtersUri)});
+            .catch( () => {console.log('failed looking up tags signal',tagsUri)});
         });
     }
 
@@ -1725,16 +1725,16 @@ class WidgetDs extends React.Component {
         }
     }
 
-    async getFiltersTAxis ({interval, filters}) {
+    async getTagsTAxis ({interval, tags}) {
         var totalAxis;
         var dpTAxis = {};
-        var filterAxis = {}
-        for (var i=0; i< filters.length; i++) {
-            var f = filters[i];
+        var tagAxis = {}
+        for (var i=0; i< tags.length; i++) {
+            var f = tags[i];
             var pids = new Set();
             for (var j=0, k=f.length; j<k; j++) {
                 var uri = f[j];
-                var dp = this.state.filtersAvailable.find( el => el.uri == uri);
+                var dp = this.state.tagsAvailable.find( el => el.uri == uri);
                 if (dp) {
                     pids.add(dp.id)
                     if (!dpTAxis.hasOwnProperty(dp.id)) {
@@ -1745,33 +1745,33 @@ class WidgetDs extends React.Component {
             console.log('dpTAxis',dpTAxis);
             console.log('pids',pids.size, pids);
             pids.forEach ( pid => {
-                if (!filterAxis.hasOwnProperty(i)) {
-                    filterAxis[i] = new Set(dpTAxis[pid]);
+                if (!tagAxis.hasOwnProperty(i)) {
+                    tagAxis[i] = new Set(dpTAxis[pid]);
                 } else {
                     var tmpAxis = new Set();
-                    filterAxis[i].forEach( x => {
+                    tagAxis[i].forEach( x => {
                         if (dpTAxis[pid].indexOf(x)>-1) {
                             tmpAxis.add(x);
                         }
                     });
-                    console.log('reemplazando filterAxis - tmpAxis',filterAxis[i]);
-                    filterAxis[i] = tmpAxis;
+                    console.log('reemplazando tagAxis - tmpAxis',tagAxis[i]);
+                    tagAxis[i] = tmpAxis;
                 }
             });
         }
-        console.log('filter Axis',filterAxis);
-        Object.keys(filterAxis).forEach( (key,i) => {
+        console.log('tag Axis',tagAxis);
+        Object.keys(tagAxis).forEach( (key,i) => {
             if (i == 0) {
-                totalAxis = new Set(filterAxis[key]);
+                totalAxis = new Set(tagAxis[key]);
             } else {
-                filterAxis[key].forEach( d => totalAxis.add(d));
+                tagAxis[key].forEach( d => totalAxis.add(d));
             }
         });
         var axisData = [...totalAxis].sort( (a,b) => a-b);
         return axisData;
     }
 
-    async getFilteredData ({axis, interval}) {
+    async getTaggedData ({axis, interval}) {
         var data = [];
         var last;
         if (interval.ets == null || interval.its == null) {
@@ -1809,26 +1809,26 @@ class WidgetDs extends React.Component {
         return data;
     }
 
-    async refreshData ({intLength, filtersApplied}={}) {
+    async refreshData ({intLength, tagsApplied}={}) {
         var now = new Date().getTime()/1000;
         if (intLength == null) {
             intLength = this.state.intLength;
         }
-        if (filtersApplied == null) {
-            filtersApplied = this.state.filtersApplied;
+        if (tagsApplied == null) {
+            tagsApplied = this.state.tagsApplied;
         }
         if (intLength == 0) {
             var interval = {ets:null, its:null};
         } else {
             var interval = {ets:now, its:now-intLength};
         }
-        if (filtersApplied.length > 0) {
-            var tAxis = await this.getFiltersTAxis({interval:interval, filters:filtersApplied});
+        if (tagsApplied.length > 0) {
+            var tAxis = await this.getTagsTAxis({interval:interval, tags:tagsApplied});
         } else {
             var tAxis = null;
         }
         console.log('tAxis',tAxis);
-        var data = await this.getFilteredData({axis:tAxis, interval:interval});
+        var data = await this.getTaggedData({axis:tAxis, interval:interval});
         console.log('filtered data',data);
         //Una vez que tengo el resultado, compruebo si cambia en algo los datos actuales.
         var shouldUpdate = false;
@@ -2489,18 +2489,18 @@ class WidgetDs extends React.Component {
         PubSub.publish(topics.MONITOR_DATAPOINT,payload);
     }
 
-    getFiltersApplied = () => {
-        var filters = this.state.filtersApplied.map( (d,i) => {
+    getTagsApplied = () => {
+        var tags = this.state.tagsApplied.map( (d,i) => {
             console.log('map',d,i);
-            var filterName = '';
+            var tagName = '';
             for (var j=0,k=d.length;j<k;j++) {
                 var fields = d[j].split('.');
                 var subc = fields.pop();
                 var category = fields.pop();
                 if (j>0) {
-                    filterName += ' AND ';
+                    tagName += ' AND ';
                 }
-                filterName += ' '+category+':'+subc;
+                tagName += ' '+category+':'+subc;
             }
             if (i>0) {
                 var logic = <span className='label label-default key-row-item'>OR</span>;
@@ -2509,21 +2509,21 @@ class WidgetDs extends React.Component {
             <span key={i}>
               {logic}
               <span className='label label-success key-row-item'>
-                <span id={i} className='glyphicon glyphicon-remove clickable' onClick={this.removeFilterApplied}/>
-                {filterName}
+                <span id={i} className='glyphicon glyphicon-remove clickable' onClick={this.removeTagApplied}/>
+                {tagName}
               </span>
             </span>
             );
         });
-        return <div>{filters}</div>
+        return <div>{tags}</div>
     }
 
-    async loadFiltersAvailable () {
-        var filtersAvailable = [];
-        var filtersNode = await getNodeInfoByUri(this.state.datasourcename+'._filters');
-        if (filtersNode && filtersNode.children && filtersNode.children.length > 0) {
-            var hasFilters = false;
-            await Promise.all(filtersNode.children.map( async (childUri) => {
+    async loadTagsAvailable () {
+        var tagsAvailable = [];
+        var tagsNode = await getNodeInfoByUri(this.state.datasourcename+'._tags');
+        if (tagsNode && tagsNode.children && tagsNode.children.length > 0) {
+            var hasTags = false;
+            await Promise.all(tagsNode.children.map( async (childUri) => {
                 console.log('add req ',childUri);
                 var info = await getNodeInfoByUri(childUri);
                 console.log('info obtenida ',info);
@@ -2531,33 +2531,33 @@ class WidgetDs extends React.Component {
                     await Promise.all(info.children.map( async (childUri) => {
                         var childInfo = await getNodeInfoByUri(childUri);
                         if (childInfo && childInfo.type == 'p') {
-                            hasFilters = true;
-                            filtersAvailable.push(childInfo);
+                            hasTags = true;
+                            tagsAvailable.push(childInfo);
                         }
                     }));
                 }
             }));
-            if (hasFilters == true) {
-                filtersAvailable.sort( (a,b) => a.uri.localeCompare(b.uri));
-                this.setState({filtersAvailable:filtersAvailable});
+            if (hasTags == true) {
+                tagsAvailable.sort( (a,b) => a.uri.localeCompare(b.uri));
+                this.setState({tagsAvailable:tagsAvailable});
             }
         }
     }
 
-    showFiltersModal = () => {
-        if (this.state.hasFilters) {
-            if (this.state.filtersAvailable == null) {
-                this.loadFiltersAvailable();
+    showTagsModal = () => {
+        if (this.state.hasTags) {
+            if (this.state.tagsAvailable == null) {
+                this.loadTagsAvailable();
             }
-            this.setState({filtersModal:true, currentFilterSelection:[]});
+            this.setState({tagsModal:true, currentTagSelection:[]});
         }
     }
 
-    getFiltersMenu () {
-        console.log('getFiltersMenu');
-        if (this.state.filtersModal == false) {
+    getTagsMenu () {
+        console.log('getTagsMenu');
+        if (this.state.tagsModal == false) {
             return null;
-        } else if (this.state.filtersAvailable == null) {
+        } else if (this.state.tagsAvailable == null) {
             return (
               <div style={styles.banner}>
                 Loading...
@@ -2567,8 +2567,8 @@ class WidgetDs extends React.Component {
             var counter = 0;
             var items = [];
             var categories = [];
-            //filtersAvailable should be stored alphabetically sorted by uri
-            this.state.filtersAvailable.forEach( dp => {
+            //tagsAvailable should be stored alphabetically sorted by uri
+            this.state.tagsAvailable.forEach( dp => {
                 var name = dp.uri.split('.');
                 var sc = name.pop();
                 var cat = name.pop();
@@ -2577,19 +2577,19 @@ class WidgetDs extends React.Component {
                     items.push(<tr key={counter++}><th>{cat}</th></tr>);
                     items.push(
                       <tr key={counter++}>
-                        <td><ReactBootstrap.Checkbox id={dp.uri} onChange={this.filterCheckboxHandler} inline>{sc}</ReactBootstrap.Checkbox></td>
+                        <td><ReactBootstrap.Checkbox id={dp.uri} onChange={this.tagCheckboxHandler} inline>{sc}</ReactBootstrap.Checkbox></td>
                       </tr>
                     );
                 } else {
                     items.push(
                       <tr key={counter++}>
-                        <td><ReactBootstrap.Checkbox id={dp.uri} onChange={this.filterCheckboxHandler} inline>{sc}</ReactBootstrap.Checkbox></td>
+                        <td><ReactBootstrap.Checkbox id={dp.uri} onChange={this.tagCheckboxHandler} inline>{sc}</ReactBootstrap.Checkbox></td>
                       </tr>
                     );
                 }
             });
             return (
-              <div className="modal-filters">
+              <div className="modal-tags">
                 <ReactBootstrap.Table hover condensed>
                   <tbody>
                     {items}
@@ -2600,49 +2600,49 @@ class WidgetDs extends React.Component {
         }
     }
 
-    filterCheckboxHandler = (event) => {
-        var currentSelection = this.state.currentFilterSelection;
+    tagCheckboxHandler = (event) => {
+        var currentSelection = this.state.currentTagSelection;
         if (event.target.checked) {
             currentSelection.push(event.target.id);
-            this.setState({currentFilterSelection:currentSelection});
+            this.setState({currentTagSelection:currentSelection});
         } else {
             var index = currentSelection.indexOf(event.target.id);
             if (index > -1) {
                 currentSelection.splice(index,1);
-                this.setState({currentFilterSelection:currentSelection});
+                this.setState({currentTagSelection:currentSelection});
             }
         }
     }
 
-    cancelFilterSelection = () => {
-        this.setState({filtersModal:false});
+    cancelTagSelection = () => {
+        this.setState({tagsModal:false});
     }
 
-    applyFilterSelection = () => {
-        if (this.state.currentFilterSelection.length > 0){
-            var newFilter = this.state.currentFilterSelection.map( d => {
+    applyTagSelection = () => {
+        if (this.state.currentTagSelection.length > 0){
+            var newTag = this.state.currentTagSelection.map( d => {
                 return d;
             });
-            var filtersApplied = this.state.filtersApplied;
-            for (var i=0,j=filtersApplied.length;i<j;i++) {
-                if (newFilter.length == filtersApplied[i].length) {
-                    var exists = newFilter.every( e => {
-                        return filtersApplied[i].indexOf(e) > -1;
+            var tagsApplied = this.state.tagsApplied;
+            for (var i=0,j=tagsApplied.length;i<j;i++) {
+                if (newTag.length == tagsApplied[i].length) {
+                    var exists = newTag.every( e => {
+                        return tagsApplied[i].indexOf(e) > -1;
                     });
                     if (exists) {
                         var payload = {
-                            message:{type:'info',message:'Filter already applied'},
+                            message:{type:'info',message:'Tag already applied'},
                             messageTime:(new Date).getTime()
                         };
                         PubSub.publish(topics.BAR_MESSAGE(),payload);
-                        this.setState({filtersModal:false});
+                        this.setState({tagsModal:false});
                         return;
                     }
                 }
             }
             //Nos suscribimos a las actualizaciones de datos de los dp que no estén suscritos
-            newFilter.forEach( uri => {
-                var dp = this.state.filtersAvailable.find( el => el.uri == uri);
+            newTag.forEach( uri => {
+                var dp = this.state.tagsAvailable.find( el => el.uri == uri);
                 if (dp) {
                     var topic = topics.DATAPOINT_DATA_UPDATE(dp.id);
                     var tkIndex = this.subscriptionTokens.findIndex( tk => tk.msg == topic);
@@ -2656,30 +2656,30 @@ class WidgetDs extends React.Component {
                     }
                 }
             });
-            filtersApplied.push(newFilter);
-            this.refreshData ({filtersApplied:filtersApplied});
-            this.setState({filtersModal:false, filtersApplied:filtersApplied});
+            tagsApplied.push(newTag);
+            this.refreshData ({tagsApplied:tagsApplied});
+            this.setState({tagsModal:false, tagsApplied:tagsApplied});
         } else {
-            this.setState({filtersModal:false});
+            this.setState({tagsModal:false});
         }
     }
 
-    removeFilterApplied = (event) => {
-        var filtersApplied = this.state.filtersApplied;
+    removeTagApplied = (event) => {
+        var tagsApplied = this.state.tagsApplied;
         var index = event.target.id;
         if (index > -1) {
-            var filterUris = filtersApplied[index].map(uri => uri);
-            filtersApplied.splice(index,1);
-            console.log('uris del filtro',filterUris);
-            filterUris.forEach( uri => {
-                var found = filtersApplied.some( filter => {
-                    if (filter.some( fUri => fUri == uri )) {
+            var tagUris = tagsApplied[index].map(uri => uri);
+            tagsApplied.splice(index,1);
+            console.log('uris del filtro',tagUris);
+            tagUris.forEach( uri => {
+                var found = tagsApplied.some( tag => {
+                    if (tag.some( fUri => fUri == uri )) {
                         return true;
                     }
                 });
                 //Nos desuscribimos de las actualizaciones de datos de los dp si ya no se necesitan
                 if (found == false) {
-                    var dp = this.state.filtersAvailable.find( el => el.uri == uri);
+                    var dp = this.state.tagsAvailable.find( el => el.uri == uri);
                     if (dp) {
                         var topic = topics.DATAPOINT_DATA_UPDATE(dp.id);
                         var tkIndex = -1
@@ -2696,8 +2696,8 @@ class WidgetDs extends React.Component {
                     }
                 }
             });
-            this.refreshData ({filtersApplied:filtersApplied});
-            this.setState({filtersApplied:filtersApplied});
+            this.refreshData ({tagsApplied:tagsApplied});
+            this.setState({tagsApplied:tagsApplied});
         }
     }
 
@@ -2713,14 +2713,14 @@ class WidgetDs extends React.Component {
         var textClass=this.getFontClass();
         var dsClass = this.state.anomaly ? "ds-content ds-anomaly "+textClass : "ds-content "+textClass;
         var info_node=this.getDsInfo();
-        if (this.state.hasFilters == true) {
-            var addFilter = (
-                <ReactBootstrap.Button bsStyle="primary" active={false} onClick={this.showFiltersModal}>Filters <span className='glyphicon glyphicon-plus-sign' /></ReactBootstrap.Button>
+        if (this.state.hasTags == true) {
+            var addTag = (
+                <ReactBootstrap.Button bsStyle="primary" active={false} onClick={this.showTagsModal}>tags <span className='glyphicon glyphicon-plus-sign' /></ReactBootstrap.Button>
             );
-            var filters = this.getFiltersApplied();
+            var tags = this.getTagsApplied();
         } else {
-            var addFilter = null;
-            var filters = null;
+            var addTag = null;
+            var tags = null;
         }
         var share_modal=(
           <ReactBootstrap.Modal show={this.state.shareModal} onHide={this.cancelSnapshot}>
@@ -2738,19 +2738,19 @@ class WidgetDs extends React.Component {
             </ReactBootstrap.Modal.Footer>
           </ReactBootstrap.Modal>
         );
-        var filters_modal=(
-          <ReactBootstrap.Modal show={this.state.filtersModal} onHide={this.cancelFilterSelection}>
+        var tags_modal=(
+          <ReactBootstrap.Modal show={this.state.tagsModal} onHide={this.cancelTagSelection}>
             <ReactBootstrap.Modal.Header closeButton={true}>
               <ReactBootstrap.Modal.Title>
-                Select Filters
+                Select tags
               </ReactBootstrap.Modal.Title>
             </ReactBootstrap.Modal.Header>
             <ReactBootstrap.Modal.Body>
-              {this.getFiltersMenu()}
+              {this.getTagsMenu()}
             </ReactBootstrap.Modal.Body>
             <ReactBootstrap.Modal.Footer>
-              <ReactBootstrap.Button bsStyle="default" onClick={this.cancelFilterSelection}>Cancel</ReactBootstrap.Button>
-              <ReactBootstrap.Button bsStyle="primary" onClick={this.applyFilterSelection}>Apply</ReactBootstrap.Button>
+              <ReactBootstrap.Button bsStyle="default" onClick={this.cancelTagSelection}>Cancel</ReactBootstrap.Button>
+              <ReactBootstrap.Button bsStyle="primary" onClick={this.applyTagSelection}>Apply</ReactBootstrap.Button>
             </ReactBootstrap.Modal.Footer>
           </ReactBootstrap.Modal>
         );
@@ -2759,12 +2759,12 @@ class WidgetDs extends React.Component {
             {info_node}
             <div className="row">
               <div className="col-sm-7">
-                {filters}
+                {tags}
               </div>
               <div className="col-sm-5 visual-bar text-right">
                 <ReactBootstrap.ButtonToolbar bsSize="xsmall">
                 <ReactBootstrap.ButtonGroup bsSize="xsmall">
-                  {addFilter}
+                  {addTag}
                 </ReactBootstrap.ButtonGroup>
                 <ReactBootstrap.ButtonGroup bsSize="xsmall">
                   <ReactBootstrap.Button id="4" active={this.state.activeVis == 4 ? true : false} onClick={this.selectVis}>24h</ReactBootstrap.Button>
@@ -2783,7 +2783,7 @@ class WidgetDs extends React.Component {
               {share_modal}
             </div>
             <div>
-              {filters_modal}
+              {tags_modal}
             </div>
           </div>
         );
