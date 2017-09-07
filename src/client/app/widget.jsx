@@ -4,6 +4,7 @@ import PubSub from 'pubsub-js';
 import * as ReactBootstrap from 'react-bootstrap';
 import * as d3 from 'd3';
 import * as utils from './utils.js';
+import {Typeahead} from 'react-bootstrap-typeahead';
 import {getWidgetConfig} from './widget-store.js';
 import {getDatasourceConfig, getDatasourceData, getDatasourceDataAt} from './datasource-store.js';
 import {getDatapointConfig, getDatapointData, getDatapointTAxis} from './datapoint-store.js';
@@ -423,7 +424,7 @@ class WidgetConfigDs extends React.Component {
                     var datapointname='...';
                     dpsInfo.forEach( state_dp => {
                         if (state_dp.pid == dp.pid) {
-                            datapointname = state_dp.datapointname.split(this.state.datasourcename)[1];
+                            datapointname = state_dp.datapointname.split(this.state.datasourcename+'.')[1];
                         }
                     });
                     var title=<div>Does this value belong to <strong>{datapointname}</strong>?</div>
@@ -454,7 +455,7 @@ class WidgetConfigDs extends React.Component {
                 var list = this.state.dpsInfo.map( (dp,i) => {
                     return (
                       <ReactBootstrap.ListGroupItem key={i} onClick={this.onClickVariable.bind(null, dp.pid, position, length)}>
-                        {dp.datapointname.split(this.state.datasourcename)[1]}
+                        {dp.datapointname.split(this.state.datasourcename+'.')[1]}
                       </ReactBootstrap.ListGroupItem>
                     );
                 });
@@ -515,7 +516,7 @@ class WidgetConfigDs extends React.Component {
                     datapointname = '...';
                     dpsInfo.forEach( state_dp => {
                         if (state_dp.pid == dp.pid) {
-                            datapointname = state_dp.datapointname.split(this.state.datasourcename)[1];
+                            datapointname = state_dp.datapointname.split(this.state.datasourcename+'.')[1];
                         }
                     });
                     if (utils.inJSONString(dsData.content, position)) {
@@ -560,7 +561,7 @@ class WidgetConfigDs extends React.Component {
                 var list = this.state.dpsInfo.map( (dp,i) => {
                     return (
                       <ReactBootstrap.ListGroupItem key={i} onClick={this.onClickVariable.bind(null, dp.pid, parseInt(obj.position), parseInt(obj.length))}>
-                        {dp.datapointname.split(this.state.datasourcename)[1]}
+                        {dp.datapointname.split(this.state.datasourcename+'.')[1]}
                       </ReactBootstrap.ListGroupItem>
                     );
                 });
@@ -687,7 +688,7 @@ class WidgetConfigDs extends React.Component {
                         var list = this.state.dpsInfo.map( (dp,i) => {
                             return (
                               <ReactBootstrap.ListGroupItem key={i} onClick={this.onClickVariable.bind(null, dp.pid, position, length)}>
-                                {dp.datapointname.split(this.state.datasourcename)[1]}
+                                {dp.datapointname.split(this.state.datasourcename+'.')[1]}
                               </ReactBootstrap.ListGroupItem>
                             );
                         });
@@ -1538,6 +1539,7 @@ class WidgetDs extends React.Component {
 
             newState.did = values[0].did;
             newState.datasourcename = values[0].datasourcename;
+            newState.supplies = values[0].supplies
             console.log('data received',values[1]);
             newState.seq = values[1].data[0].seq;
             newState.dsData = [values[1].data[0]];
@@ -1552,9 +1554,13 @@ class WidgetDs extends React.Component {
                     subscribedTopics.push(topics.DATAPOINT_CONFIG_UPDATE(dp.pid));
                     newState.datapoints.push({
                         pid:dp.pid,
-                        datapointname:dp.datapointname
+                        datapointname:dp.datapointname.split(newState.datasourcename+'.')[1]
                     });
                 });
+
+                var datapoints = newState.datapoints.map(e => e.datapointname);
+                newState.missing = newState.supplies.filter(e => !datapoints.includes(e));
+                console.log('missing vale',newState.missing, newState.supplies, datapoints);
 
                 newState.datapoints.sort( (a,b) => {
                     var nameA=a.datapointname.toLowerCase();
@@ -1902,7 +1908,7 @@ class WidgetDs extends React.Component {
             shouldUpdate = true;
             for (var i=0,j=newPids.length;i<j;i++) {
                 var pid = newPids[i];
-                var exists = this.subscriptiontokens.some ( d => {
+                var exists = this.subscriptionTokens.some ( d => {
                     return d.msg == topics.DATAPOINT_CONFIG_UPDATE(pid);
                 });
                 if (!exists) {
@@ -1914,8 +1920,13 @@ class WidgetDs extends React.Component {
                     });
                 }
                 var dpConfig = await getDatapointConfig(pid);
-                newDatapoints.push({pid:dpConfig.pid, datapointname:dpConfig.datapointname});
+                newDatapoints.push({pid:dpConfig.pid, datapointname:dpConfig.datapointname.split(this.state.datasourcename+'.')[1]});
             }
+        }
+        var deletedSupplies = this.state.supplies.some( i => !dsConfig.supplies.includes(i));
+        var newSupplies = dsConfig.supplies.some(i => !this.state.supplies.includes(i));
+        if (deletedSupplies || newSupplies) {
+            shouldUpdate = true;
         }
         if (shouldUpdate) {
             newDatapoints.sort( (a,b) => {
@@ -1923,9 +1934,14 @@ class WidgetDs extends React.Component {
                 var nameB=b.datapointname.toLowerCase();
                 return ((nameA < nameB) ? -1 : ((nameA > nameB) ? 1 : 0));
             });
+            var dpNames = newDatapoints.map(e => e.datapointname);
+            var newMissing = dsConfig.supplies.filter(e => !dpNames.includes(e));
+            console.log('new missing vale',newMissing, dsConfig.supplies, dpNames);
             this.setState({
-                datasourcename:datasourcename,
+                datasourcename:dsConfig.datasourcename,
                 datapoints: newDatapoints,
+                missing: newMissing,
+                supplies: dsConfig.supplies,
             });
         }
     }
@@ -2070,11 +2086,11 @@ class WidgetDs extends React.Component {
                     datapointname = null;
                     dsDatapoints.forEach( state_dp => {
                         if (state_dp.pid == dp.pid) {
-                            datapointname = state_dp.datapointname.split(this.state.datasourcename);
+                            datapointname = state_dp.datapointname;
                         }
                     });
                     if (datapointname) {
-                        datapointname = datapointname[1].slice(-20);
+                        datapointname = datapointname.slice(-20);
                         if (datapointname.length == 20) {
                             datapointname = "..."+datapointname;
                         }
@@ -2095,7 +2111,7 @@ class WidgetDs extends React.Component {
             if (datapointFound == false && can_edit == true) {
                 text=dsData.content.substr(position,length);
                 elements.push(
-                  <WidgetDsVariable key={numElement++} content={text} position={position} length={length} seq={dsData.seq} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints} />
+                  <WidgetDsVariable key={numElement++} content={text} position={position} length={length} seq={dsData.seq} identifyVariableCallback={this.identifyVariable} guessList={this.state.missing}/>
                 );
             } else {
                 datapointFound = false;
@@ -2194,11 +2210,11 @@ class WidgetDs extends React.Component {
                         datapointname = null;
                         dsDatapoints.forEach( stateDp => {
                             if (stateDp.pid == dp.pid) {
-                                datapointname = stateDp.datapointname.split(this.state.datasourcename);
+                                datapointname = stateDp.datapointname;
                             }
                         });
                         if (datapointname) {
-                            datapointname = datapointname[1].slice(-20);
+                            datapointname = datapointname.slice(-20);
                             if (datapointname.length == 20) {
                                 datapointname = "..."+datapointname;
                             }
@@ -2345,7 +2361,7 @@ class WidgetDs extends React.Component {
         var objType = Object.prototype.toString.apply(obj)
         if (objType == '[object Object]' && obj.hasOwnProperty('_k_type')) {
             if (obj._k_type == 'var') {
-                return <WidgetDsVariable content={obj.text} position={parseInt(obj.position)} length={parseInt(obj.length)} seq={obj.seq} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints}/>
+                return <WidgetDsVariable content={obj.text} position={parseInt(obj.position)} length={parseInt(obj.length)} seq={obj.seq} identifyVariableCallback={this.identifyVariable} guessList={this.state.missing} />
             } else if (obj._k_type == 'dp') {
                 var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{obj.datapointname}</ReactBootstrap.Tooltip>;
                 return (
@@ -2440,7 +2456,7 @@ class WidgetDs extends React.Component {
                     }
                     var params = match.split('/*_k_type')[1].split('*/')[0].split('/')
                     if (params[1] == "var") {
-                        result.push(<WidgetDsVariable key={child++} content={params[2]} position={parseInt(params[3])} length={parseInt(params[4])} seq={params[5]} identifyVariableCallback={this.identifyVariable} datapoints={this.state.datapoints}/>);
+                        result.push(<WidgetDsVariable key={child++} content={params[2]} position={parseInt(params[3])} length={parseInt(params[4])} seq={params[5]} identifyVariableCallback={this.identifyVariable} guessList={this.state.missing} />);
                     } else if (params[1] == "dp") {
                         var tooltip=<ReactBootstrap.Tooltip id='datapoint'>{params[3]}</ReactBootstrap.Tooltip>;
                         result.push(
@@ -3873,29 +3889,40 @@ class ContentTable extends React.Component {
 
 class WidgetDsVariable extends React.Component {
     state = {
-        datapoints: this.props.datapoints,
-    };
+        datapointname: null,
+    }
 
     identifyVariable = () => {
-        var datapointname=this.datapointname.value;
-        if (datapointname.length>1){
+        if (this.state.datapointname && this.state.datapointname.length>0){
+            var datapointname = this.state.datapointname;
             this.popover.hide();
             this.props.identifyVariableCallback({position:this.props.position, length:this.props.length, datapointname:datapointname, seq:this.props.seq});
+            this.setState({datapointname:null});
         }
     }
 
     componentWillReceiveProps (nextProps) {
         if (this.popover.state.show == true && this.props.seq != nextProps.seq) {
             this.popover.hide();
+            this.setState({datapointname:null});
         }
     }
 
     render () {
+
         var popover = (
           <ReactBootstrap.Popover id="datapoint" title="Identify Datapoint">
             <ReactBootstrap.FormGroup>
               <ReactBootstrap.InputGroup>
-                <ReactBootstrap.FormControl inputRef={(datapointname) => {this.datapointname = datapointname; }} type="text" placeholder="Datapoint name" />
+                <Typeahead
+                  autoFocus
+                  minLength={1}
+                  placeholder="Datapoint name"
+                  onInputChange = {name => this.setState({datapointname:name})}
+                  emptyLabel={''}
+                  options={this.props.guessList}
+                  maxResults={5}
+                />
                 <ReactBootstrap.InputGroup.Button>
                   <ReactBootstrap.Button onClick={this.identifyVariable}>Ok</ReactBootstrap.Button>
                 </ReactBootstrap.InputGroup.Button>
@@ -3903,6 +3930,7 @@ class WidgetDsVariable extends React.Component {
             </ReactBootstrap.FormGroup>
           </ReactBootstrap.Popover>
         );
+
         return (
           <ReactBootstrap.OverlayTrigger ref={ (popover) => {this.popover = popover; }} trigger="click" rootClose={true} placement="right" overlay={popover}>
             <span className="variable">{this.props.content}</span>
