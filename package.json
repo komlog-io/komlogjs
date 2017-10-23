@@ -33,6 +33,7 @@
     "react-markdown": "^2.4.4",
     "style-loader": "^0.13.1",
     "url-loader": "^0.5.7",
-    "webpack": "^1.14.0"
+    "webpack": "^1.14.0",
+    "webpack-s3-plugin": "git+https://github.com/fabianfett/s3-plugin-webpack.git"
   }
 }
