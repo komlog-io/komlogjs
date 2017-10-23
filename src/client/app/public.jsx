@@ -131,7 +131,6 @@ class Footer extends React.Component {
 }
 
 class Root extends React.Component {
-    home_bg = require('./img/home_bg.jpg');
     api_img = require('./img/apiintegrations.png');
     ts_img  = require('./img/timeseriestructure.png');
     gr_img  = require('./img/groupmetrics.png');
@@ -142,18 +141,15 @@ class Root extends React.Component {
         return (
           <div>
             <div className="home-bg">
-              <img src={this.home_bg} width={2333}/>
               <div className="home-slogan">
-                <span style={{marginLeft:'-5%',fontWeight:700}}>Built</span>{' '}for the<br />
-                <span style={{fontWeight:700,color:'#011c39'}}>Data Driven</span>
+                <h1>A platform to <strong>help</strong> teams <strong>better understand</strong> their systems.</h1>
               </div>
             </div>
-            <div className="description">
-              <div className="container">
-                Komlog is a flexible and powerful platform, aimed at <strong>time series visualization and analysis</strong>. It helps you identify and organize your time series and create <strong>real-time, lambda-based applications</strong> with them, making it a valuable tool for any <strong>data driven organization</strong>.
+            <div className="separator">
+              <div style={{textAlign:'center'}}>
+                <a className="btn btn-join" href="/signup/?i=HelloKomlog">Create FULL FEATURED & FREE account</a>
               </div>
             </div>
-            <div className="separator" />
             <div className="features">
               <div className="container">
                 <div className="row feature-box">
@@ -210,16 +206,11 @@ class Root extends React.Component {
                     Komlog is designed with team work in mind. It allows you and your organization to share and use your data based on your needs. Share dashboards and graph ranges or full time series structures secure and easily.
                   </div>
                 </div>
-                <div className="col-md-10 col-md-offset-1 col-sm-12 video-box">
-                  <div className="embed-responsive embed-responsive-16by9">
-                    <iframe className="embed-responsive-item" src="https://www.youtube.com/embed/y_oeB5mcAT4"></iframe>
-                  </div>
-                </div>
               </div>
             </div>
             <div className="big-separator">
               <div style={{textAlign:'center'}}>
-                <a className="btn btn-join" href="/signup">CREATE FREE ACCOUNT</a>
+                <a className="btn btn-join" href="/signup/?i=HelloKomlog">Create FULL FEATURED & FREE account</a>
               </div>
             </div>
           </div>
