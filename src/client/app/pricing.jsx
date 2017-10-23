@@ -9,21 +9,22 @@ class Pricing extends React.Component {
           <div className="container">
             <div className="pricing-heading">
               <span>Start using</span>
-              <span style={{fontWeight:'700'}}>{' '}Komlog for free.</span>
+              <span style={{fontWeight:'700'}}>{' '}Komlog for free.</span><br />
               <span>{' '}Upgrade if you need it.</span><br />
+              <span>{' '}Leave us anytime.</span><br />
             </div>
             <div className="pricing-table">
               <div className="col-sm-3">
                 <div>
                   <div style={{color:'#011c39',fontFamily:"'Raleway',sans-serif",fontWeight:'700',fontSize:'40px',height:'120px',marginBottom:'15px',textAlign:'center'}}>
                     Free<br/>
-                    <a href="/signup" className="btn btn-join">SIGN UP</a>
+                    <a href="/signup/?i=HelloKomlog" className="btn btn-join">SIGN UP</a>
                     <div style={{fontSize:'14px',fontWeight:'400',color:'#ccc'}}>No credit card required</div>
                   </div>
                   <table className="table plan-content">
                     <tbody>
                       <tr>
-                        <td>500 daily push requests</td>
+                        <td>5K daily push requests</td>
                       </tr>
                       <tr>
                         <td>100 MB sliding window</td>
@@ -40,7 +41,7 @@ class Pricing extends React.Component {
                   <div style={{color:'#011c39',fontFamily:"'Raleway',sans-serif",fontWeight:'700',fontSize:'40px',height:'120px',marginBottom:'15px',textAlign:'center'}}>
                     Startup<br />
                     <span style={{fontSize:'14px',fontWeight:'700'}}>$</span>
-                    {' '}99{' '}
+                    {' '}199{' '}
                     <span style={{fontSize:'14px',fontWeight:'700',color:'#ccc'}}>monthly</span>
                   </div>
                   <table className="table plan-content">
@@ -48,7 +49,7 @@ class Pricing extends React.Component {
                       <tr>
                       </tr>
                       <tr>
-                        <td>50000 daily push requests</td>
+                        <td>100K daily push requests</td>
                       </tr>
                       <tr>
                         <td>1 GB sliding window</td>
@@ -84,7 +85,7 @@ class Pricing extends React.Component {
               <div className="col-sm-3">
                 <div>
                   <div style={{color:'#011c39',fontFamily:"'Raleway',sans-serif",fontWeight:'700',fontSize:'40px',height:'120px',marginBottom:'15px',textAlign:'center'}}>
-                    On Premise<br/>
+                    On&nbsp;Prem<br/>
                     <a href="mailto:hello@komlog.io" className="btn btn-contact">CONTACT US</a>
                   </div>
                   <table className="table plan-content">
