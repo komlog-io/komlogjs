@@ -1,5 +1,5 @@
 import React from 'react';
-import {Navbar, Nav, NavItem, Alert, Collapse} from 'react-bootstrap';
+import {Navbar, Nav, NavItem, Alert, Collapse, Image, Grid, Row, Col, Thumbnail} from 'react-bootstrap';
 
 
 class Header extends React.Component {
@@ -74,7 +74,7 @@ class Footer extends React.Component {
           <footer className="footer">
             <div className="container">
               <div className="row">
-                <div className="col-lg-2  col-md-2 col-sm-4 col-xs-6">
+                <div className="col-lg-2  col-md-2 col-sm-4 col-xs-6 col-md-offset-2">
                   <div className="title">Legal</div>
                   <ul className="list">
                     <li>
@@ -131,10 +131,13 @@ class Footer extends React.Component {
 }
 
 class Root extends React.Component {
-    api_img = require('./img/apiintegrations.png');
-    ts_img  = require('./img/timeseriestructure.png');
-    gr_img  = require('./img/groupmetrics.png');
-    sh_img  = require('./img/sharegraph.png');
+    company_codeback = require('./img/company_codeback.png')
+    company_hoppin = require('./img/company_hoppin.png')
+    company_zumo = require('./img/company_zumo.png')
+    dashboard = require('./img/dashboard_1.png')
+    terminal_1 = require('./img/terminal_1.png')
+    terminal_2 = require('./img/terminal_2.png')
+    report_1 = require('./img/report_1.png')
 
 
     render () {
@@ -142,77 +145,68 @@ class Root extends React.Component {
           <div>
             <div className="home-bg">
               <div className="home-slogan">
-                <h1>A platform to <strong>help</strong> teams <strong>better understand</strong> their systems.</h1>
-              </div>
-            </div>
-            <div className="separator">
-              <div style={{textAlign:'center'}}>
+                <h1>A platform to <strong>help</strong> teams <strong>better understand</strong> their systems</h1>
+                <br />
+                <br />
                 <a className="btn btn-join" href="/signup/?i=HelloKomlog">Create FULL FEATURED & FREE account</a>
               </div>
             </div>
-            <div className="features">
-              <div className="container">
-                <div className="row feature-box">
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <h3 style={{color:'#0cbda9'}}>Create time series based applications</h3>
-                    Komlog allows you to structure your time series and create applications that react to changes on them in real-time. Any time series based process or procedure can be integrated in Komlog and transform your company into a data-driven one.
-                  </div>
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <img src={this.ts_img}/>
-                  </div>
-                </div>
-                <div className="row feature-box hidden-md hidden-lg">
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <h3 style={{color:'#0cbda9'}}>Include Komlog within your stack</h3>
-                    You can easily integrate Komlog functionality into your current stack with our API. No matter the applications you use, Komlog can extract your time series even from plain texts.
-                  </div>
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <img src={this.api_img} />
-                  </div>
-                </div>
-                <div className="row feature-box hidden-sm hidden-xs">
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <img src={this.api_img} />
-                  </div>
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <h3 style={{color:'#0cbda9'}}>Include Komlog within your stack</h3>
-                    You can easily integrate Komlog functionality into your current stack with our API. No matter the applications you use, Komlog can extract your time series even from plain texts.
-                  </div>
-                </div>
-                <div className="row feature-box">
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <h3 style={{color:'#0cbda9'}}>Visualize your processes in real time</h3>
-                    Combine your data to create graphs and group them on dashboards to see your organization's state in real time.
-                  </div>
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <img src={this.gr_img} />
-                  </div>
-                </div>
-                <div className="row feature-box hidden-md hidden-lg">
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <h3 style={{color:'#0cbda9'}}>Team work batteries included</h3>
-                    Komlog is designed with team work in mind. It allows you and your organization to share and use your data based on your needs. Share dashboards and graph ranges or full time series structures secure and easily.
-                  </div>
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <img src={this.sh_img} />
-                  </div>
-                </div>
-                <div className="row feature-box hidden-sm hidden-xs">
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <img src={this.sh_img} />
-                  </div>
-                  <div className="col-md-6 col-sm-12 vcenter">
-                    <h3 style={{color:'#0cbda9'}}>Team work batteries included</h3>
-                    Komlog is designed with team work in mind. It allows you and your organization to share and use your data based on your needs. Share dashboards and graph ranges or full time series structures secure and easily.
-                  </div>
-                </div>
-              </div>
+            <div className="home-subtitle">
+              <h3>Komlog is a flexible and powerful platform for <strong>visualizing and processing data</strong>. <br/>Our mission is to build a helpful tool for such a <strong>broad and heterogeneous</strong> field as systems analysis.</h3>
+              <Image className="subtitle-image" src={this.dashboard} responsive />
             </div>
-            <div className="big-separator">
-              <div style={{textAlign:'center'}}>
-                <a className="btn btn-join" href="/signup/?i=HelloKomlog">Create FULL FEATURED & FREE account</a>
-              </div>
+            <div className="home-subtitle">
+              <h1>If you can see it, Komlog can <span className="text-strong">visualize</span> it.</h1>
+              <h3>Operating system commands, database queries, config files... Komlog will extract metrics from any text you send.<br/><strong>Parsing is something from the past.</strong></h3>
+              <Image className="subtitle-image" src={this.terminal_1} responsive />
+              <h3>Leverages the full potential of the command line interface</h3>
+              <Image className="subtitle-image" src={this.terminal_2} responsive />
             </div>
+            <div className="home-subtitle">
+              <h1>Process your data in <span className="text-strong">real-time</span></h1>
+              <h3>Anomaly detection, forecasts, reports. Data based decisions are key.</h3>
+              <Image className="subtitle-image" src={this.report_1} responsive />
+            </div>
+            <div className="home-subtitle">
+              <h1>And <span className="text-strong">much</span> more</h1>
+              <h3>Create and distribute your own plugins.</h3>
+              <h3>Share data with other members within your team.</h3>
+              <h3>Build applications using data from multiple sources.</h3>
+            </div>
+            <div className="home-subtitle-gradient">
+              <Row>
+              <h1 style={{'color':'white'}}>Get started in minutes. Discover <strong>Komlog</strong>.</h1>
+              </Row>
+              <Row>
+              <Col xs={6} md={3} mdOffset={3}>
+                <h3 style={{'color':'white'}}>Are you ready?</h3>
+                <br/>
+                <a className="btn btn-join" href="/signup/?i=HelloKomlog">SIGN UP</a>
+              </Col>
+              <Col xs={6} md={3}>
+                <h3 style={{'color':'white'}}>Need Analysts?</h3>
+                <br/>
+                <a href="mailto:hello@komlog.io" className="btn btn-contact">CONTACT US</a>
+              </Col>
+              </Row>
+            </div>
+            <div className="home-subtitle">
+              <h3>Great companies rely on <span className="text-strong">Komlog</span>.</h3>
+            </div>
+            <Grid>
+              <Row>
+                <Col xs={4} md={3} mdOffset={2}>
+                  <a href="https://hoppin.es"><Image style={{'maxWidth':'100px'}} alt="Hoppin" src={this.company_hoppin} responsive rounded/></a>
+                </Col>
+                <Col xs={4} md={3}>
+                  <a href="http://codeback.es"><Image style={{'maxWidth':'100px'}} alt="Codeback software" src={this.company_codeback} responsive rounded /></a>
+                </Col>
+                <Col xs={4} md={3}>
+                  <a href="https://zumostudio.com"><Image style={{'maxWidth':'100px'}} alt="Zumo Studio" src={this.company_zumo} responsive rounded /></a>
+                </Col>
+              </Row>
+            </Grid>
+            <br/>
           </div>
         );
     }
